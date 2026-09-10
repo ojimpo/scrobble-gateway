@@ -1,0 +1,7 @@
+{"ts":"2026-09-10T12:03:57.865Z","tool":"list_servers","action":"list","ok":true,"durationMs":1}
+{"ts":"2026-09-10T12:04:24.967Z","tool":"list_docker_containers","serverId":"devserver","action":"list_docker_containers","ok":true,"durationMs":124}
+{"ts":"2026-09-10T12:04:36.873Z","tool":"docker_logs","serverId":"devserver","action":"docker_logs","ok":true,"durationMs":152,"details":{"containerName":"lastfm-mcp-lastfm-mcp-1","lines":30}}
+{"ts":"2026-09-10T12:06:29.929Z","tool":"docker_logs","serverId":"devserver","action":"docker_logs","ok":true,"durationMs":137,"details":{"containerName":"lastfm-mcp-lastfm-mcp-1","lines":15,"since":"2026-09-10T12:06:00Z"}}
+{"ts":"2026-09-10T12:06:39.758Z","tool":"docker_logs","serverId":"devserver","action":"docker_logs","ok":true,"durationMs":153,"details":{"containerName":"lastfm-mcp-lastfm-mcp-1","lines":10}}
+{"ts":"2026-09-10T12:07:01.557Z","tool":"docker_logs","serverId":"devserver","action":"docker_logs","ok":true,"durationMs":125,"details":{"containerName":"lastfm-mcp-lastfm-mcp-1","lines":10}}
+{"ts":"2026-09-10T12:09:52.006Z","tool":"docker_logs","serverId":"devserver","action":"docker_logs","ok":true,"durationMs":123,"details":{"containerName":"lastfm-mcp-lastfm-mcp-1","lines":10}}

@@ -2,7 +2,9 @@
 
 A personal Last.fm MCP server built with Node.js and TypeScript. It uses stateless Streamable HTTP, maintains a canonical local listening index, combines Last.fm with MusicBrainz metadata, records explicit preferences, and produces evidence-backed taste analytics and recommendations.
 
-The server uses only read-only Last.fm and MusicBrainz methods. API credentials stay inside the container and are never returned through MCP. Feedback, exclusions, and recommendation events are written only to the local SQLite database.
+The default deployment uses read-only Last.fm and MusicBrainz methods. Optional Spotify integration adds private library reads, playlist creation, and bidirectional likes/loves synchronization. Spotify likes can automatically become Last.fm loves on startup and hourly. API credentials stay inside the container and are never returned through MCP. Feedback, exclusions, and recommendation events are written only to the local SQLite database.
+
+See [Spotify setup and automatic likes sync](#spotify-setup-and-automatic-likes-sync) for the optional integration.
 
 ## Features
 
@@ -49,7 +51,7 @@ Informational tools are marked read-only. `sync_listening_history`, feedback/pre
 4. Copy the **API key**.
 5. Get your username from your profile URL: `https://www.last.fm/user/<username>`.
 
-Last.fm also displays a shared secret, but this server does not need it. `user.getInfo`, `user.getTop*`, `user.getRecentTracks`, `user.getLovedTracks`, and `artist.getInfo` do not require a user session. Do not add the shared secret to `.env`.
+Last.fm also displays a shared secret. The original read-only tools do not need it: `user.getInfo`, `user.getTop*`, `user.getRecentTracks`, `user.getLovedTracks`, and `artist.getInfo` do not require a user session. To sync Spotify likes into Last.fm loves, set `LASTFM_API_SECRET` and authorize Last.fm using the CLI described below.
 
 MusicBrainz does not require an API key. It does require a meaningful `User-Agent`; set `MUSICBRAINZ_USER_AGENT` to an application name/version plus your public URL or email. The client serializes calls and defaults to one request every 1.1 seconds.
 
@@ -180,7 +182,9 @@ Developer mode and custom MCP app availability depend on your plan and workspace
 
 ChatGPT custom apps should not rely on an arbitrary user-supplied API key or header. `LASTFM_API_KEY` remains server-side, but it is not client authentication.
 
-`MCP_ENABLE_MUTATIONS=false` is the safe default. The server still advertises all tools, but sync, feedback, preference, exclusion, recommendation generation/recording, and private feedback/recommendation reads reject calls; the taste graph omits explicit preference edges. Enable them only behind trusted access control such as a private Secure MCP Tunnel or OAuth 2.1 gateway. A public no-auth endpoint with mutations enabled lets any caller read or alter your local preference database and trigger expensive syncs. Query-string tokens are intentionally unsupported because URLs are commonly recorded in logs and browser history.
+`MCP_ENABLE_MUTATIONS=false` is the safe default. The server still advertises all original Last.fm tools, but sync, feedback, preference, exclusion, recommendation generation/recording, and private feedback/recommendation reads reject calls; the taste graph omits explicit preference edges. Enable them only behind trusted access control such as a private Secure MCP Tunnel or OAuth 2.1 gateway. A public no-auth endpoint with mutations enabled lets any caller read or alter your local preference database and trigger expensive syncs. Query-string tokens are intentionally unsupported because URLs are commonly recorded in logs and browser history.
+
+Spotify tools are separately opt-in with `MCP_ENABLE_SPOTIFY_TOOLS=true`, because even their read operations expose private account data. Manual Spotify/Last.fm writes additionally require `MCP_ENABLE_MUTATIONS=true`. The automatic Spotify → Last.fm scheduler is controlled independently by `SPOTIFY_AUTO_SYNC_ENABLED`; it does not expose a public trigger or require enabling MCP writes.
 
 ## Configuration
 
@@ -275,3 +279,136 @@ docker compose build
 ```
 
 The project uses the official MCP TypeScript SDK v2, the Express adapter with Host and Origin validation, Node.js 24, and the built-in `node:sqlite` module.
+
+## Spotify setup and automatic likes sync
+
+### Configuration and authorization
+
+1. Create an app with Web API access in the [Spotify developer dashboard](https://developer.spotify.com/dashboard). In Development Mode, the app owner needs Premium and the account using the app must have access in its user settings. See the [Development Mode migration guide](https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide).
+2. Register the exact redirect URI `http://127.0.0.1:8888/callback`. Spotify permits HTTP for explicit loopback IPs, but not `localhost`; other redirects require HTTPS. See [redirect URI rules](https://developer.spotify.com/documentation/web-api/concepts/redirect_uri).
+3. Set `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, and `SPOTIFY_REDIRECT_URI` in `.env`. Set `LASTFM_API_SECRET` to the shared secret belonging to your existing `LASTFM_API_KEY`.
+4. Authorize both services once. For local development, set `HISTORY_DB_PATH=./data/lastfm.sqlite` so credential files are written into the local ignored `data/` directory:
+
+```bash
+npm run auth -- spotify
+npm run auth -- lastfm
+```
+
+For Docker, rebuild/recreate the service to apply code and `.env` changes, then use the same persistent container volume:
+
+```bash
+docker compose up -d --build
+docker compose exec lastfm-mcp npm run auth:built -- spotify
+docker compose exec lastfm-mcp npm run auth:built -- lastfm
+docker compose restart lastfm-mcp
+```
+
+Spotify authorization prints a browser URL. Approve it, then paste the **full redirect URL** into the waiting CLI prompt within ten minutes. The browser may show connection refused at `127.0.0.1:8888`; that is expected because this flow reads the URL manually and opens no callback listener. It works when the CLI runs over SSH or in Docker and the browser runs on your computer. Do not paste the URL into a chat or put it in shell history. OAuth state is random, expires, and is consumed once.
+
+The Last.fm command prints an authorization link and waits for Enter after approval. It exchanges the authorized token for a session and refuses to save a session belonging to a different `LASTFM_USERNAME`. Last.fm passwords are never requested. See [Last.fm desktop authentication](https://www.last.fm/api/authspec) and [track.love](https://www.last.fm/api/show/track.love).
+
+If authentication succeeds but Docker reports a missing session, check where the CLI ran. `/app/data` on the host and `/app/data` inside the container are different storage locations: Compose mounts a named volume only inside the container. Run the `auth:built` commands via `docker compose exec` above so the server reads the same files. The CLI prints the saved file path and warns when host authentication uses Docker-style `/app/` paths.
+
+Spotify requests these scopes:
+
+```text
+user-library-read user-library-modify user-read-recently-played user-top-read
+playlist-read-private playlist-read-collaborative
+playlist-modify-private playlist-modify-public
+```
+
+The access token refreshes automatically, including one refresh after an API `401`. Rotated refresh tokens are saved; an omitted refresh token preserves the existing one. Revoked authorization requires running the CLI again. Tokens/session keys use atomic files with mode `0600`, defaulting to `spotify-tokens.json` and `lastfm-session.json` beside `HISTORY_DB_PATH`. Docker's `/app/data` volume preserves them across restarts. Custom paths must also be private, persistent, and excluded from source control. Tokens are not encrypted on disk.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | Unset | Both required to enable the integration |
+| `SPOTIFY_REDIRECT_URI` | `http://127.0.0.1:8888/callback` | Exact registered OAuth redirect |
+| `SPOTIFY_TOKEN_PATH` | Beside `HISTORY_DB_PATH` | Persistent Spotify token file |
+| `LASTFM_API_SECRET` | Unset | Required for Last.fm authentication and loving tracks |
+| `LASTFM_SESSION_PATH` | Beside `HISTORY_DB_PATH` | Persistent authorized Last.fm session |
+| `SPOTIFY_AUTO_SYNC_ENABLED` | `true` when Spotify is configured | Automatic **Spotify → Last.fm** writes |
+| `SPOTIFY_AUTO_SYNC_INTERVAL_SECONDS` | `3600` | Delay after each completed run; range 60–86400 |
+| `MCP_ENABLE_SPOTIFY_TOOLS` | `false` | Expose private Spotify and cross-provider MCP tools |
+| `MCP_ENABLE_MUTATIONS` | `false` | Permit manual remote writes with `dryRun=false` |
+
+### Automatic synchronization
+
+With both accounts authorized and `SPOTIFY_AUTO_SYNC_ENABLED=true`, the server reconciles Spotify Liked Songs with Last.fm loved tracks on startup, then one hour after each completed run. Set the interval to `300` for polling about every five minutes. This implementation polls [saved tracks](https://developer.spotify.com/documentation/web-api/reference/get-users-saved-tracks); it does not receive an instant like notification.
+
+The first successful run imports the **entire existing liked library**, not just future likes. To preview first, set `SPOTIFY_AUTO_SYNC_ENABLED=false`, authorize, enable Spotify MCP tools behind trusted access, and call `sync_spotify_likes_to_lastfm` with `dryRun=true`. Then set the flag to `true` and recreate the container. Updating `.env` requires `docker compose up -d`; `restart` alone does not reload container environment variables.
+
+Both directions are additive: no likes/loves are removed. If you manually unlove a track on Last.fm while keeping it liked on Spotify, the next automatic run can love it again. Last.fm → Spotify runs only when explicitly called. Automatic runs do not require enabling public MCP tools or `MCP_ENABLE_MUTATIONS`.
+
+Each run reads full libraries with pagination, resolves missing identities, and writes only confident matches. Source duplicates are collapsed. A process-wide service guard prevents overlapping syncs; the scheduler waits for a run to finish before arming the next timer. Failed/unresolved items are reconsidered next time. A restart always reconciles current libraries, so there is no fragile timestamp watermark that can miss older likes. Run one server replica per credential store; no distributed lock is implemented.
+
+The latest automatic result is available through `get_music_sync_status` when Spotify tools are enabled, in the log event `spotify_lastfm_auto_sync`, and in `music-sync-status.json` beside the history database. For a deployment with Spotify tools disabled:
+
+```bash
+docker compose exec lastfm-mcp cat /app/data/music-sync-status.json
+```
+
+The status file survives restarts; the MCP status describes the current process. A failed scan does not start writes. Per-track failures appear in the summary; `errorCount` is complete and `errors` contains at most 100 details. The scheduler retries on the next interval and stops scheduling new runs on shutdown.
+
+### New MCP tools
+
+All 13 tools below require `MCP_ENABLE_SPOTIFY_TOOLS=true`. The original 30 Last.fm tools retain their existing behavior. Put the endpoint behind trusted access before exposing Spotify's private data; Spotify account OAuth authorizes this server, not callers of `/mcp`.
+
+| Tool | Main inputs / behavior |
+| --- | --- |
+| `spotify_get_liked_tracks` | `limit` (default 50, max 1000) |
+| `spotify_get_recent_tracks` | `limit`; bounded by Spotify's retained recent history |
+| `spotify_get_top_tracks` | `limit`, `timeRange`: `short_term`, `medium_term`, `long_term` |
+| `spotify_get_top_artists` | Same range/limit inputs |
+| `spotify_get_playlists` | `limit`; current user's playlists |
+| `spotify_search_track` | `artist`, `title`; up to 10 catalog candidates |
+| `spotify_create_playlist` | `name`, optional `description`, `tracks`, `public`, `dryRun` |
+| `spotify_add_tracks_to_playlist` | `playlistId`, `tracks`, `dryRun` |
+| `create_spotify_playlist_from_tracks` | `name`, `tracks`, optional `description`, `public`, `dryRun` |
+| `sync_spotify_likes_to_lastfm` | `dryRun`; complete library reconciliation |
+| `sync_lastfm_loves_to_spotify` | `dryRun`; complete reverse reconciliation |
+| `compare_spotify_lastfm_library` | Read-only differences, ambiguity/unresolved counts; `limit` and `offset` paginate returned details |
+| `get_music_sync_status` | No inputs; scheduler status and most recent result |
+
+Read tools paginate internally up to their requested result limit; sync and comparison load all available library pages. Returned tracks contain artist, title, provider identity, album/duration when available, and timestamps where relevant. Search results are candidates rather than asserted matches.
+
+Example MCP arguments (use these objects when calling the named tool):
+
+```json
+{"name":"sync_spotify_likes_to_lastfm","arguments":{"dryRun":true}}
+```
+
+```json
+{"name":"sync_lastfm_loves_to_spotify","arguments":{"dryRun":false}}
+```
+
+```json
+{"name":"compare_spotify_lastfm_library","arguments":{"limit":100,"offset":0}}
+```
+
+```json
+{"name":"create_spotify_playlist_from_tracks","arguments":{"name":"Favorites","tracks":["spotify:track:4iV5W9uYEdYUVa79Axb7Rh"],"public":false,"dryRun":true}}
+```
+
+All mutating tools default to `dryRun=true`. Real manual writes require `MCP_ENABLE_MUTATIONS=true`. Sync summaries include `scanned`, `duplicates`, `alreadySynced`, `wouldAdd`, `added`, `unmatched`, `ambiguous`, `probable`, `errorCount`, and bounded `errors`. `wouldAdd` counts planned unique additions; `added` counts confirmed writes and stays zero during a dry run. `probable` is a subset of `unmatched`. `duplicates` includes repeated source identities and distinct source entries resolving to the same planned destination; counters should not be blindly summed.
+
+Playlist creation deduplicates input IDs/URIs; explicit appends preserve supplied ordering and duplicates. Playlist creation/appending is not idempotent. If appending fails after creation, the result includes `partial=true` and the created playlist, so inspect/resume it rather than creating another playlist. Failed appends report how many items were confirmed before the failed batch; a timeout can leave that batch's outcome unknown.
+
+### Matching and API limits
+
+- Unicode NFKC/case folding, whitespace, typographic punctuation, equivalent `feat.`/`ft.`/`featuring` title markers, and explicit remaster suffixes are normalized. Generic edition/version labels, live, acoustic, remix, radio-edit and other recording qualifiers remain significant.
+- Matching MBIDs or Spotify IDs are strong identity evidence. Conflicting MBIDs are rejected. Spotify does not supply MBIDs, so no MBID is invented from an artist/title pair.
+- Only `exact` and `normalized_exact` matches can be written. Multiple equally strong candidates are `ambiguous`. Missing feature credits or lossy punctuation matches are `probable` and skipped. Different featured performers are not silently equated.
+- Last.fm resolution uses `track.getInfo` with autocorrection disabled and may retry an explicit remaster title without its label. Spotify resolution searches up to ten candidates. Catalog aliases, absent metadata, region restrictions and multiple releases can remain unresolved; catalog-wide uniqueness is not guaranteed by a bounded search.
+- Last.fm may canonicalize names when saving loves (for example, Latin `Flëur` becomes `Flёur` with Cyrillic `ё`). Before writing a resolved missing track, `track.getCorrection` checks whether its provider-confirmed canonical identity is already loved. This prevents repeated writes without globally equating lookalike characters or relaxing the matching rules for new writes.
+- Full-library polling favors recovery and correctness over minimum API traffic. The first import and comparisons can be slow for large libraries. Libraries can change while offset pages are fetched; subsequent automatic runs reconcile again. No cross-provider transaction or removal propagation is implemented.
+- The client uses the current [save-library endpoint](https://developer.spotify.com/documentation/web-api/reference/save-library-items) (`PUT /me/library`, up to 40 URIs), [current-user playlist creation](https://developer.spotify.com/documentation/web-api/reference/create-playlist) (`POST /me/playlists`), and [playlist items endpoint](https://developer.spotify.com/documentation/web-api/reference/add-items-to-playlist) (`POST /playlists/{id}/items`, up to 100 items). Deprecated write routes are not used.
+- `429 Retry-After` is respected with bounded retries; waits over 60 seconds fail the current operation and retain a client cooldown. Account `QUOTA_EXCEEDED` fails immediately. Since July 2026, Development Mode quotas are [shared per developer account](https://developer.spotify.com/documentation/web-api/references/changes/july-2026).
+- Playlists default to `public=false`. Spotify's [playlist visibility documentation](https://developer.spotify.com/documentation/web-api/concepts/playlists) distinguishes profile publication from link access; this setting is not a guarantee that a playlist link is inaccessible to others.
+
+### Implementation and validation
+
+`src/providers/spotify/` owns OAuth, token refresh, normalized API responses, pagination, and write batching. `LastFmClient` adds full loved-library reads, track resolution and signed writes without replacing existing reads. `track-identity.ts` implements conservative cross-provider identity; it deliberately does not change the existing history canonicalization rules. `MusicLibraryService` owns sync, comparison and playlist orchestration; `MusicSyncScheduler` owns background execution. MCP registration only validates inputs and delegates. No new dependencies were added.
+
+Mock API tests cover OAuth state/scopes and refresh-token preservation, concurrent refresh, pagination, unsafe/repeated pagination links, current Spotify write routes/batches, rate limits, Last.fm signatures and account validation, normalization/version/feature cases, ambiguity, duplicate inputs, idempotent syncs in both directions, dry-run, partial failures, MCP flags/defaults, scheduler persistence/retry/shutdown, and the original Last.fm surface. Run `npm run check` for strict type checking, the full test suite, and build. Real-account OAuth and live writes must be verified after configuring credentials.
+
+Potential next steps are a reviewed mapping-override store for ambiguous tracks and a durable resolution cache to reduce repeated catalog lookups. Recommendation algorithms and new analytics playlist logic are intentionally left for later.

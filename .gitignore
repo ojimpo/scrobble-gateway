@@ -7,3 +7,6 @@ coverage/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+spotify-tokens.json*
+lastfm-session.json*
+music-sync-status.json*

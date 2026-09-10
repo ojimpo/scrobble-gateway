@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { trackIdentity, stripRemaster, type TrackIdentity } from "./track-identity.js";
 import type {
   AlbumPlay,
   ArtistContext,
@@ -25,6 +27,8 @@ export type LastFmClientOptions = {
   minRequestIntervalMs: number;
   cacheTtlMs: number;
   fetchImpl?: FetchLike;
+  apiSecret?: string;
+  getSessionKey?: () => Promise<string>;
 };
 
 export class LastFmApiError extends Error {
@@ -135,6 +139,78 @@ export class LastFmClient implements LastFmApi {
     });
   }
 
+  /** Full uncached library for reconciliation; existing bounded read tool is unchanged. */
+  async getAllLovedTracks(): Promise<TrackIdentity[]> {
+    const tracks: TrackIdentity[] = [];
+    for (let page = 1; ; page++) {
+      const response = await this.call("user.getLovedTracks", { page, limit: 200 }, false);
+      const container = record(response.lovedtracks);
+      const items = array(container.track);
+      for (const item of items) {
+        const t = record(item);
+        tracks.push(trackIdentity({ artist: text(record(t.artist).name), title: text(t.name),
+          ...(text(t.mbid) ? { mbid: text(t.mbid) } : {}), ...(text(t.url) ? { lastfmUrl: text(t.url) } : {}) }));
+      }
+      const totalPages = integer(record(container["@attr"]).totalPages);
+      if (totalPages === null) throw new Error("Last.fm loved-tracks pagination metadata missing; refusing an incomplete library scan");
+      if (page >= totalPages) break;
+      if (!items.length) throw new Error("Last.fm returned an empty page before the end of loved tracks");
+    }
+    return tracks;
+  }
+
+  async findTrack(source: TrackIdentity): Promise<TrackIdentity[]> {
+    const candidates: TrackIdentity[] = [];
+    for (const title of new Set([source.title, stripRemaster(source.title)])) {
+      try {
+        const response = await this.call("track.getInfo", source.mbid ? { mbid: source.mbid, autocorrect: 0 }
+          : { artist: source.artist, track: title, autocorrect: 0 });
+        const t = record(response.track);
+        if (text(t.name) && text(record(t.artist).name)) candidates.push(trackIdentity({
+          artist: text(record(t.artist).name), title: text(t.name),
+          ...(text(t.mbid) ? { mbid: text(t.mbid) } : {}), ...(text(t.url) ? { lastfmUrl: text(t.url) } : {}) }));
+      } catch (error) {
+        if (!(error instanceof LastFmApiError && error.code === 6)) throw error;
+      }
+    }
+    return candidates;
+  }
+
+  async loveTrack(track: TrackIdentity): Promise<void> {
+    if (!this.options.getSessionKey) throw new Error("Last.fm write authorization is not configured");
+    await this.call("track.love", { artist: track.artist, track: track.title, sk: await this.options.getSessionKey() }, false, true);
+    this.cache.clear();
+  }
+
+  /** Last.fm can canonicalize a love on write even when getInfo autocorrect is disabled. */
+  async getTrackCorrections(source: TrackIdentity): Promise<TrackIdentity[]> {
+    const response = await this.call("track.getCorrection", { artist: source.artist, track: source.title });
+    return array(record(response.corrections).correction).flatMap((value) => {
+      const t = record(record(value).track);
+      const artist = text(record(t.artist).name);
+      const title = text(t.name);
+      return artist && title ? [trackIdentity({ artist, title,
+        ...(text(t.mbid) ? { mbid: text(t.mbid) } : {}), ...(text(t.url) ? { lastfmUrl: text(t.url) } : {}) })] : [];
+    });
+  }
+
+  async beginAuth(): Promise<string> {
+    const response = await this.call("auth.getToken", {}, false, true);
+    const token = text(response.token);
+    if (!token) throw new Error("Last.fm returned no authentication token");
+    return token;
+  }
+
+  async completeAuth(token: string): Promise<{ username: string; sessionKey: string }> {
+    const response = await this.call("auth.getSession", { token }, false, true);
+    const session = record(response.session);
+    if (text(session.name).toLowerCase() !== this.options.username.toLowerCase()) {
+      throw new Error("Authorized Last.fm account does not match LASTFM_USERNAME");
+    }
+    if (!text(session.key)) throw new Error("Last.fm returned no session key");
+    return { username: text(session.name), sessionKey: text(session.key) };
+  }
+
   async getRecentTracksPage(input: {
     from?: number;
     to?: number;
@@ -235,18 +311,25 @@ export class LastFmClient implements LastFmApi {
     method: string,
     params: Record<string, string | number | boolean | undefined>,
     cacheable = true,
+    signed = false,
   ): Promise<JsonRecord> {
     const url = new URL(this.options.baseUrl);
     const searchParams = new URLSearchParams({
       method,
       api_key: this.options.apiKey,
-      user: this.options.username,
       format: "json",
     });
+    if (!signed) searchParams.set("user", this.options.username);
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined) searchParams.set(key, String(value));
     }
-    url.search = searchParams.toString();
+    if (signed) {
+      if (!this.options.apiSecret) throw new Error("LASTFM_API_SECRET is required for Last.fm authentication and writes");
+      const signature = [...searchParams.entries()].filter(([key]) => key !== "format")
+        .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key, value]) => key + value).join("") + this.options.apiSecret;
+      searchParams.set("api_sig", createHash("md5").update(signature, "utf8").digest("hex"));
+    }
+    if (!signed) url.search = searchParams.toString();
 
     const cacheKey = redactApiKey(url).toString();
     const cached = this.cache.get(cacheKey);
@@ -259,6 +342,8 @@ export class LastFmClient implements LastFmApi {
       try {
         await this.waitForRateLimit();
         const response = await this.fetchImpl(url, {
+          method: signed ? "POST" : "GET",
+          ...(signed ? { body: searchParams, redirect: "error" as const } : {}),
           headers: { accept: "application/json", "user-agent": "lastfm-mcp/0.3.0" },
           signal: AbortSignal.timeout(this.options.timeoutMs),
         });

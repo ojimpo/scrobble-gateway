@@ -10,6 +10,7 @@ import { LastFmClient } from "./lastfm-client.js";
 import { ListeningService } from "./listening-service.js";
 import { createLastFmMcpServer } from "./mcp-server.js";
 import { MusicBrainzClient } from "./musicbrainz-client.js";
+import { createMusicRuntime } from "./music-runtime.js";
 
 const config = loadConfig();
 const history = new HistoryRepository(config.historyDbPath);
@@ -47,7 +48,8 @@ const intelligence = new IntelligenceService(
   config.mutationsEnabled,
 );
 
-const handler = createMcpHandler(() => createLastFmMcpServer(service, intelligence));
+const music = createMusicRuntime(config);
+const handler = createMcpHandler(() => createLastFmMcpServer(service, intelligence, music));
 const nodeHandler = toNodeHandler(handler);
 const app = createMcpExpressApp({
   host: config.host,
@@ -72,6 +74,7 @@ app.all("/mcp", (request: Request, response: Response) => {
 const httpServer = app.listen(config.port, config.host, () => {
   console.log(`Last.fm MCP listening on http://${config.host}:${config.port}/mcp for ${config.lastfmUsername}`);
 });
+music.scheduler?.start();
 
 let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {
@@ -80,6 +83,7 @@ async function shutdown(signal: string): Promise<void> {
   console.log(`Received ${signal}; shutting down`);
   httpServer.close();
   await handler.close();
+  await music.scheduler?.stop();
   intelligenceRepository.close();
   history.close();
 }

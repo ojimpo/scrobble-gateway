@@ -10,6 +10,8 @@
     "dev:sync": "tsx src/sync.ts",
     "start": "node dist/src/index.js",
     "sync": "node dist/src/sync.js",
+    "auth": "tsx src/auth.ts",
+    "auth:built": "node dist/src/auth.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit"
