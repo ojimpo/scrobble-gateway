@@ -1,8 +1,8 @@
 import { identityKey, isSafeMatch, resolveTrack, uniqueTracks, TrackIdentityIndex, type TrackIdentity, type MatchStatus } from "./track-identity.js";
-import { spotifyTrackUri, type SpotifyTrack, type SpotifyPlaylist } from "./providers/spotify/client.js";
+import { spotifyTrackUri, SpotifyApiError, type SpotifyTrack, type SpotifyPlaylist } from "./providers/spotify/client.js";
 
 export interface SpotifyLibrary {
-  getLikedTracks(): Promise<SpotifyTrack[]>;
+  getLikedTracks(limit?: number, fresh?: boolean): Promise<SpotifyTrack[]>;
   searchTrack(artist: string, title: string): Promise<SpotifyTrack[]>;
   saveTracks(tracks: string[]): Promise<void>;
   createPlaylist(name: string, description?: string, isPublic?: boolean): Promise<SpotifyPlaylist>;
@@ -20,6 +20,7 @@ export type SyncSummary = {
   direction: SyncDirection; dryRun: boolean; scanned: number; duplicates: number; alreadySynced: number;
   added: number; wouldAdd: number; unmatched: number; ambiguous: number; probable: number;
   errorCount: number; errors: { artist: string; title: string; message: string }[];
+  interrupted?: { reason: "spotify_rate_limit"; retryAfterSeconds: number };
 };
 
 export class MusicLibraryService {
@@ -34,7 +35,7 @@ export class MusicLibraryService {
     if (this.running) throw new Error("Music library sync is already running; try again after it finishes");
     this.running = true;
     try {
-      const [spotify, lastfm] = await Promise.all([this.spotify.getLikedTracks(), this.lastfm.getAllLovedTracks()]);
+      const [spotify, lastfm] = await Promise.all([this.spotify.getLikedTracks(Infinity, true), this.lastfm.getAllLovedTracks()]);
       const source = direction === "spotify_to_lastfm" ? spotify : lastfm;
       const target = direction === "spotify_to_lastfm" ? lastfm : spotify;
       const targetIndex = new TrackIdentityIndex(target);
@@ -66,7 +67,13 @@ export class MusicLibraryService {
       for (let i = 0; i < pending.length; i += 40) {
         const batch = pending.slice(i, i + 40);
         try { await this.spotify.saveTracks(batch.map((t) => t.spotifyId!)); result.added += batch.length; }
-        catch (error) { for (const track of batch) this.addError(result, track, message(error)); }
+        catch (error) {
+          for (const track of batch) this.addError(result, track, message(error));
+          if (error instanceof SpotifyApiError && error.status === 429) {
+            result.interrupted = { reason: "spotify_rate_limit", retryAfterSeconds: Math.ceil(error.retryAfterMs / 1000) };
+            break;
+          }
+        }
       }
       return result;
     } finally { this.running = false; }
@@ -140,7 +147,11 @@ export class MusicLibraryService {
         }
       }
       return { source, status: match.status, ...(match.track ? { target: match.track } : {}) };
-    } catch (error) { return { source, status: "error", error: message(error) }; }
+    } catch (error) {
+      // A provider-wide block is not an unmatched track. Stop scanning instead of retrying every remaining item.
+      if (error instanceof SpotifyApiError && error.status === 429) throw error;
+      return { source, status: "error", error: message(error) };
+    }
   }
   private addError(result: SyncSummary, track: TrackIdentity, error: string): void {
     result.errorCount++;

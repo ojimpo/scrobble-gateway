@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { MusicLibraryService, type LastFmLibrary, type SpotifyLibrary } from "../src/music-library-service.js";
 import { trackIdentity as t } from "../src/track-identity.js";
 import type { SpotifyTrack } from "../src/providers/spotify/client.js";
+import { SpotifyApiError } from "../src/providers/spotify/client.js";
 const id = "a".repeat(22);
 const source: SpotifyTrack = { ...t({ artist: "Artist", title: "Song", spotifyId: id }), album: "Album", durationMs: 123, available: true };
 function setup(mutations = true, automatic = true) {
@@ -17,6 +18,15 @@ function setup(mutations = true, automatic = true) {
   return { saved, loved, spotify, lastfm, service: new MusicLibraryService(spotify, lastfm, mutations, automatic) };
 }
 describe("MusicLibraryService", () => {
+  it("stops bulk catalog resolution on a provider-wide 429", async () => {
+    const { service, loved, spotify } = setup();
+    loved.push(t({ artist: "Another", title: "Track" }));
+    spotify.searchTrack.mockRejectedValueOnce(new SpotifyApiError(429, 60000));
+    await expect(service.sync("lastfm_to_spotify")).rejects.toThrow("429");
+    expect(spotify.searchTrack).toHaveBeenCalledTimes(1);
+    expect(spotify.saveTracks).not.toHaveBeenCalled();
+    expect(spotify.getLikedTracks).toHaveBeenCalledWith(Infinity, true);
+  });
   it("recognizes existing Flёur loves through Last.fm's explicit Flëur correction despite different MBIDs", async () => {
     const { service, saved, loved, lastfm } = setup();
     const title = "Мы никогда не умрём";

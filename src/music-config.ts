@@ -10,6 +10,10 @@ const schema = z.object({
   MCP_ENABLE_SPOTIFY_TOOLS: bool.default(false),
   SPOTIFY_AUTO_SYNC_ENABLED: bool.default(true),
   SPOTIFY_AUTO_SYNC_INTERVAL_SECONDS: z.coerce.number().int().min(60).max(86400).default(3600),
+  SPOTIFY_MIN_REQUEST_INTERVAL_MS: z.coerce.number().int().min(100).max(60000).default(2000),
+  SPOTIFY_MAX_QUEUE_WAIT_MS: z.coerce.number().int().min(1000).max(120000).default(60000),
+  SPOTIFY_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).max(3600).default(60),
+  SPOTIFY_SEARCH_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).max(86400).default(3600),
 });
 
 export function loadMusicConfig(env: NodeJS.ProcessEnv, historyDbPath: string) {
@@ -21,5 +25,8 @@ export function loadMusicConfig(env: NodeJS.ProcessEnv, historyDbPath: string) {
     spotifyRedirectUri: p.SPOTIFY_REDIRECT_URI, spotifyTokenPath: p.SPOTIFY_TOKEN_PATH ?? join(dir, "spotify-tokens.json"),
     lastfmApiSecret: p.LASTFM_API_SECRET, lastfmSessionPath: p.LASTFM_SESSION_PATH ?? join(dir, "lastfm-session.json"),
     toolsEnabled: p.MCP_ENABLE_SPOTIFY_TOOLS, autoSyncEnabled: Boolean(p.SPOTIFY_CLIENT_ID) && p.SPOTIFY_AUTO_SYNC_ENABLED,
-    intervalMs: p.SPOTIFY_AUTO_SYNC_INTERVAL_SECONDS * 1000, statusPath: join(dir, "music-sync-status.json") };
+    intervalMs: p.SPOTIFY_AUTO_SYNC_INTERVAL_SECONDS * 1000, statusPath: join(dir, "music-sync-status.json"),
+    minRequestIntervalMs: p.SPOTIFY_MIN_REQUEST_INTERVAL_MS, maxQueueWaitMs: p.SPOTIFY_MAX_QUEUE_WAIT_MS,
+    cacheTtlMs: p.SPOTIFY_CACHE_TTL_SECONDS * 1000, searchCacheTtlMs: p.SPOTIFY_SEARCH_CACHE_TTL_SECONDS * 1000,
+    rateLimitPath: join(dir, "spotify-rate-limit.json") };
 }

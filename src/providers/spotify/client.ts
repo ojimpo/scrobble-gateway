@@ -1,6 +1,8 @@
 import { setTimeout as delay } from "node:timers/promises";
 import * as z from "zod/v4";
 import { trackIdentity, stripRemaster, type TrackIdentity } from "../../track-identity.js";
+import { SpotifyApiError, SpotifyRateLimiter, type RateLimiterOptions } from "./rate-limiter.js";
+export { SpotifyApiError } from "./rate-limiter.js";
 
 export type SpotifyTrack = TrackIdentity & { album: string | null; durationMs: number | null; addedAt?: string; playedAt?: string; available: boolean };
 export type SpotifyPlaylist = { spotifyId: string; name: string; url: string | null; public: boolean | null };
@@ -30,20 +32,32 @@ export function spotifyTrackUri(value: string): string {
   return `spotify:track:${id}`;
 }
 
-export class SpotifyApiError extends Error {
-  constructor(readonly status: number, readonly retryAfterMs: number, readonly quotaExceeded = false) {
-    super(`Spotify HTTP ${status}${status === 403 ? "; check app access, Premium and granted scopes" : ""}${status === 429 ? `; ${quotaExceeded ? "account quota exceeded; " : ""}retry after ${Math.ceil(retryAfterMs / 1000)} seconds` : ""}`);
-  }
-}
+export type SpotifyClientOptions = RateLimiterOptions & { cacheTtlMs?: number; searchCacheTtlMs?: number };
 
 export class SpotifyClient {
-  private blockedUntil = 0;
+  private readonly limiter: SpotifyRateLimiter;
+  private readonly cache = new Map<string, { expiresAt: number; value: unknown }>();
+  private readonly inFlight = new Map<string, Promise<unknown>>();
+  private generation = 0;
+  private cacheHits = 0;
+  private coalescedRequests = 0;
+  private readonly now: () => number;
   constructor(private readonly auth: { accessToken(rejectedToken?: string): Promise<string> },
     private readonly fetchImpl: typeof fetch = fetch,
-    private readonly sleep: (ms: number) => Promise<unknown> = delay) {}
+    private readonly sleep: (ms: number) => Promise<unknown> = delay,
+    private readonly options: SpotifyClientOptions = {}) {
+    this.now = options.now ?? Date.now;
+    this.limiter = new SpotifyRateLimiter({ ...options, sleep });
+  }
 
-  async getLikedTracks(limit = Infinity): Promise<SpotifyTrack[]> {
-    return (await this.pages("me/tracks?limit=50", limit)).map((item) => {
+  async getRequestStatus() {
+    return { ...await this.limiter.getStatus(), cacheEntries: this.cache.size, cacheHits: this.cacheHits,
+      coalescedRequests: this.coalescedRequests, cacheTtlMs: this.options.cacheTtlMs ?? 60_000,
+      searchCacheTtlMs: this.options.searchCacheTtlMs ?? 3_600_000 };
+  }
+
+  async getLikedTracks(limit = Infinity, fresh = false): Promise<SpotifyTrack[]> {
+    return (await this.pages("me/tracks?limit=50", limit, fresh)).map((item) => {
       const saved = recordSchema.parse(item);
       return { ...spotifyTrack(saved.track), ...(typeof saved.added_at === "string" ? { addedAt: saved.added_at } : {}) };
     });
@@ -97,53 +111,88 @@ export class SpotifyClient {
     return { added };
   }
 
-  private async pages(path: string, limit: number): Promise<unknown[]> {
+  private async pages(path: string, limit: number, fresh = false): Promise<unknown[]> {
     const items: unknown[] = [];
     const seen = new Set<string>();
     let next: string | null = path;
     while (next && items.length < limit) {
       if (seen.has(next)) throw new Error("Spotify returned a repeated pagination cursor; library scan incomplete");
       seen.add(next);
-      const page = pageSchema.parse(await this.request(next));
+      const page = pageSchema.parse(await this.request(next, "GET", undefined, fresh));
       items.push(...page.items.slice(0, limit - items.length));
       next = page.next;
     }
     return items;
   }
 
-  private async request(path: string, method = "GET", body?: unknown): Promise<unknown> {
+  private async request(path: string, method = "GET", body?: unknown, fresh = false): Promise<unknown> {
     const url = new URL(path, "https://api.spotify.com/v1/");
     if (url.origin !== "https://api.spotify.com" || !url.pathname.startsWith("/v1/") || url.username || url.password) {
       throw new Error("Spotify returned an unsafe pagination URL");
     }
-    let token = await this.auth.accessToken();
+    if (method !== "GET") {
+      this.invalidateCache();
+      try { return await this.requestFromApi(url, method, body); }
+      finally { this.invalidateCache(); }
+    }
+    const key = url.toString();
+    const cached = this.cache.get(key);
+    if (!fresh && cached && cached.expiresAt > this.now()) {
+      this.cacheHits++; return structuredClone(cached.value);
+    }
+    const generation = this.generation;
+    const flightKey = `${generation}:${key}`;
+    const pending = this.inFlight.get(flightKey);
+    if (pending) { this.coalescedRequests++; return structuredClone(await pending); }
+    const task = this.requestFromApi(url, method).then((value) => {
+      const ttl = url.pathname === "/v1/search" ? this.options.searchCacheTtlMs ?? 3_600_000 : this.options.cacheTtlMs ?? 60_000;
+      if (ttl > 0 && generation === this.generation) {
+        this.cache.delete(key);
+        this.cache.set(key, { expiresAt: this.now() + ttl, value });
+        if (this.cache.size > 1000) this.cache.delete(this.cache.keys().next().value!);
+      }
+      return value;
+    }).finally(() => { this.inFlight.delete(flightKey); });
+    this.inFlight.set(flightKey, task);
+    return structuredClone(await task);
+  }
+
+  private invalidateCache(): void { this.generation++; this.cache.clear(); }
+
+  private async requestFromApi(url: URL, method: string, body?: unknown): Promise<unknown> {
+    let rejectedToken: string | undefined;
     let refreshed = false;
     for (let attempt = 0; ; attempt++) {
-      const wait = this.blockedUntil - Date.now();
-      if (wait > 60_000) throw new SpotifyApiError(429, wait);
-      if (wait > 0) await this.sleep(wait);
-      const response = await this.fetchImpl(url, { method, redirect: "error", signal: AbortSignal.timeout(15_000),
-        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+      const { response, token } = await this.limiter.run(async () => {
+        const token = await this.auth.accessToken(rejectedToken);
+        const response = await this.fetchImpl(url, { method, redirect: "error", signal: AbortSignal.timeout(15_000),
+          headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+        if (response.status === 429) {
+          const raw: unknown = await response.json().catch(() => ({}));
+          const parsed = z.object({ error: z.object({ reason: z.string().optional() }).optional() }).safeParse(raw);
+          const quota = Boolean(parsed.success && parsed.data.error?.reason === "QUOTA_EXCEEDED");
+          const error = await this.limiter.block(response.headers.get("retry-after"), quota);
+          console.warn(JSON.stringify({ event: "spotify_rate_limited", method, path: url.pathname,
+            retryAfterSeconds: Math.ceil(error.retryAfterMs / 1000), quotaExceeded: quota }));
+          throw error;
+        }
+        return { response, token };
+      });
       if (response.status === 401 && !refreshed) {
-        token = await this.auth.accessToken(token); refreshed = true; continue;
+        rejectedToken = token; refreshed = true; continue;
       }
       if (response.ok) {
         const raw = await response.text();
         return raw ? JSON.parse(raw) as unknown : {};
       }
-      const raw: unknown = await response.json().catch(() => ({}));
-      const parsed = z.object({ error: z.object({ reason: z.string().optional() }).optional() }).safeParse(raw);
-      const quota = parsed.success && parsed.data.error?.reason === "QUOTA_EXCEEDED";
-      const retrySeconds = Number(response.headers.get("retry-after") ?? "1");
-      const retryMs = Number.isFinite(retrySeconds) && retrySeconds >= 0 ? Math.max(1000, retrySeconds * 1000) : 1000;
-      if (response.status === 429) this.blockedUntil = Date.now() + retryMs;
+      await response.body?.cancel();
       // POSTs are not replayed after a server error: playlist creation/appends are not idempotent.
-      if (attempt < 3 && !quota && ((response.status === 429 && retryMs <= 60_000) || (response.status >= 500 && method !== "POST"))) {
-        if (response.status !== 429) await this.sleep(300 * 2 ** attempt);
+      if (attempt < 3 && response.status >= 500 && method !== "POST") {
+        await this.sleep(300 * 2 ** attempt);
         continue;
       }
-      throw new SpotifyApiError(response.status, response.status === 429 ? retryMs : 0, quota);
+      throw new SpotifyApiError(response.status, 0);
     }
   }
 }

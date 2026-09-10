@@ -25,7 +25,10 @@ export function createMusicRuntime(config: AppConfig, env: NodeJS.ProcessEnv = p
     getSessionKey });
   const auth = music.spotifyClientId && music.spotifyClientSecret ? new SpotifyAuth({ clientId: music.spotifyClientId,
     clientSecret: music.spotifyClientSecret, redirectUri: music.spotifyRedirectUri, tokenPath: music.spotifyTokenPath }) : undefined;
-  const spotify = auth ? new SpotifyClient(auth) : undefined;
+  const spotify = auth ? new SpotifyClient(auth, undefined, undefined, {
+    minIntervalMs: music.minRequestIntervalMs, maxQueueWaitMs: music.maxQueueWaitMs,
+    cacheTtlMs: music.cacheTtlMs, searchCacheTtlMs: music.searchCacheTtlMs, cooldownPath: music.rateLimitPath,
+  }) : undefined;
   const library = spotify ? new MusicLibraryService(spotify, lastfm, config.mutationsEnabled, music.autoSyncEnabled) : undefined;
   const scheduler = library && music.autoSyncEnabled ? new MusicSyncScheduler(async () => {
     await getSessionKey(); // Fail once before scanning a large library if authorization is missing.

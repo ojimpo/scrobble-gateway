@@ -45,16 +45,62 @@ describe("SpotifyClient", () => {
     await client.getLikedTracks();
     expect(auth.accessToken).toHaveBeenCalledWith("token");
   });
-  it("honors Retry-After and stops on long cooldowns", async () => {
+  it("honors Retry-After across endpoints without immediately retrying 429", async () => {
     const { client, fetchImpl, sleep } = setup();
     fetchImpl.mockResolvedValueOnce(Response.json({}, { status: 429, headers: { "retry-after": "2" } }))
       .mockResolvedValueOnce(Response.json({ items: [], next: null }));
-    await client.getLikedTracks();
-    expect(sleep.mock.calls[0]?.[0]).toBeGreaterThan(1500);
+    await expect(client.getLikedTracks()).rejects.toThrow("2 seconds");
+    await expect(client.getPlaylists()).rejects.toThrow("Spotify HTTP 429");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
     const other = setup();
     other.fetchImpl.mockResolvedValueOnce(Response.json({}, { status: 429, headers: { "retry-after": "3600" } }));
     await expect(other.client.getLikedTracks()).rejects.toThrow("3600 seconds");
     expect(other.fetchImpl).toHaveBeenCalledTimes(1);
+  });
+  it("coalesces concurrent identical reads and caches successful responses", async () => {
+    const { client, fetchImpl } = setup();
+    fetchImpl.mockImplementation(async () => Response.json({ items: [{ track: rawTrack }], next: null }));
+    const [a, b] = await Promise.all([client.getLikedTracks(), client.getLikedTracks()]);
+    expect(a).toEqual(b);
+    a[0]!.title = "caller mutation";
+    expect((await client.getLikedTracks())[0]?.title).toBe("Song");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(await client.getRequestStatus()).toMatchObject({ cacheHits: 1, coalescedRequests: 1 });
+  });
+  it("refreshes sync snapshots and invalidates cached reads after writes", async () => {
+    const { client, fetchImpl } = setup();
+    fetchImpl.mockImplementation(async (_url, init) => init?.method === "PUT" ? new Response(null, { status: 200 })
+      : Response.json({ items: [{ track: rawTrack }], next: null }));
+    await client.getLikedTracks();
+    await client.getLikedTracks(Infinity, true);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    await client.saveTracks([id]);
+    await client.getLikedTracks();
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
+  });
+  it("does not cache failed requests", async () => {
+    const { client, fetchImpl } = setup();
+    fetchImpl.mockResolvedValueOnce(Response.json({}, { status: 403 }))
+      .mockResolvedValueOnce(Response.json({ items: [], next: null }));
+    await expect(client.getLikedTracks()).rejects.toThrow("403");
+    await expect(client.getLikedTracks()).resolves.toEqual([]);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+  it("expires ordinary reads sooner than catalog searches", async () => {
+    let now = 0;
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (url) => {
+      return Response.json(String(url).includes("/search?") ? { tracks: { items: [rawTrack] } } : { items: [], next: null });
+    });
+    const client = new SpotifyClient({ accessToken: async () => "token" }, fetchImpl, async () => undefined,
+      { minIntervalMs: 0, now: () => now, cacheTtlMs: 1000, searchCacheTtlMs: 5000 });
+    await client.getLikedTracks(); await client.searchTrack("Artist", "Song");
+    now = 1001;
+    await client.getLikedTracks(); await client.searchTrack("Artist", "Song");
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    now = 5001;
+    await client.searchTrack("Artist", "Song");
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
   });
   it("does not retry exhausted account quota", async () => {
     const { client, fetchImpl } = setup();

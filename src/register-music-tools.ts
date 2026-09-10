@@ -43,7 +43,7 @@ export function registerMusicTools(server: McpServer, runtime: MusicRuntime): vo
     ({ limit, offset }) => run(() => library.compare(limit, offset)));
   server.registerTool("get_music_sync_status", { description: "Inspect the automatic Spotify likes → Last.fm loves scheduler and last result.",
     inputSchema: z.object({}), outputSchema, annotations: { ...read, openWorldHint: false } },
-    () => run(async () => scheduler?.getStatus() ?? { enabled: false }));
+    () => run(async () => ({ ...(scheduler?.getStatus() ?? { enabled: false }), spotifyRequests: await spotify.getRequestStatus() })));
 }
 
 async function run(operation: () => Promise<object>) {
