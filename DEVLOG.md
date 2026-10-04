@@ -6,6 +6,7 @@
 
 - **21:40 プロジェクト発足・名前決定** — 「arigato-gateway があるから scrobble-gateway とかは？」
   - 候補は lastfm-service / scrobble-hub / listening-core / lastfm-station。station はラジオ局の意味が強くデータ基盤とずれる、で見送り
+  - **名前は `scrobble-gateway` で確定**（2026-10-04 本人）
   - 実在の `sync-gateway`（本人が改名して忘れていた）と並ぶ名前。README で別物と明記する
   - 9/17 に Cosense で固まった方針（独立基盤・health-ojimpo は利用者）に従う。旧案「health.db を MCP が直接読む」「health-ojimpo API を叩く」は破棄済み
 - **Like 同期の方針** — 「Last.fm ではLoveはつけてない、Spotifyではつけてる」「これから再生するSpotifyのトラックがLoveされてたらLast.fmで順次していくってやり方だったら安全じゃない？」
