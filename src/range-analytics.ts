@@ -83,6 +83,10 @@ export class RangeAnalytics {
     this.db.close();
   }
 
+  getDailyPlays(username: string, from?: string, to?: string): DailyPlays[] {
+    return dailyPlays(this.db, username, from, to);
+  }
+
   getTop(username: string, range: TimeRange, dimension: RangeDimension, limit: number): RangeTop {
     assertRange(range);
     const rows = this.aggregate(username, range, dimension);
@@ -234,4 +238,39 @@ function ratio(part: number, whole: number): number {
 
 function round(value: number): number {
   return Math.round(value * 10_000) / 10_000;
+}
+
+export type DailyPlays = { date: string; plays: number };
+
+/**
+ * Plays per UTC calendar day, for consumers that only need a daily figure
+ * (health-ojimpo turns it into listening minutes). Days without plays are
+ * omitted. `from` / `to` are inclusive YYYY-MM-DD.
+ */
+export function dailyPlays(db: DatabaseSync, username: string, from?: string, to?: string): DailyPlays[] {
+  const conditions = ["username = ?"];
+  const values: SQLInputValue[] = [username];
+  if (from !== undefined) {
+    conditions.push("played_at_unix >= ?");
+    values.push(utcDayStart(from, "from"));
+  }
+  if (to !== undefined) {
+    conditions.push("played_at_unix < ?");
+    values.push(utcDayStart(to, "to") + 86_400);
+  }
+  const rows = db.prepare(`
+    SELECT date(played_at_unix, 'unixepoch') AS day, COUNT(*) AS plays
+    FROM scrobbles
+    WHERE ${conditions.join(" AND ")}
+    GROUP BY day
+    ORDER BY day
+  `).all(...values) as Array<{ day: string; plays: number }>;
+  return rows.map((row) => ({ date: row.day, plays: Number(row.plays) }));
+}
+
+function utcDayStart(value: string, field: string): number {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error(`${field} must be YYYY-MM-DD`);
+  const milliseconds = Date.parse(`${value}T00:00:00Z`);
+  if (!Number.isFinite(milliseconds)) throw new Error(`${field} is not a valid date`);
+  return milliseconds / 1_000;
 }

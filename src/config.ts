@@ -19,6 +19,7 @@ const envSchema = z.object({
   MUSICBRAINZ_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(10_000),
   MUSICBRAINZ_MAX_RETRIES: z.coerce.number().int().min(0).max(8).default(2),
   MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS: z.coerce.number().int().min(1_000).max(30_000).default(1_100),
+  INTERNAL_API_PORT: z.coerce.number().int().min(0).max(65_535).default(3001),
   MCP_HOST: z.string().trim().min(1).default("0.0.0.0"),
   MCP_PORT: z.coerce.number().int().min(1).max(65_535).default(3000),
   MCP_ALLOWED_HOSTS: optionalString,
@@ -46,6 +47,7 @@ export type AppConfig = {
   musicbrainzMinRequestIntervalMs: number;
   host: string;
   port: number;
+  internalApiPort: number;
   allowedHosts: string[];
   mutationsEnabled: boolean;
   historyDbPath: string;
@@ -79,6 +81,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     musicbrainzMinRequestIntervalMs: parsed.MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS,
     host: parsed.MCP_HOST,
     port: parsed.MCP_PORT,
+    internalApiPort: parsed.INTERNAL_API_PORT,
     allowedHosts,
     mutationsEnabled: parsed.MCP_ENABLE_MUTATIONS,
     historyDbPath: parsed.HISTORY_DB_PATH,

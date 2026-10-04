@@ -9,6 +9,8 @@ services:
     # 既定はループバックだけ。arigato-nas では .env の MCP_BIND_ADDRESS=0.0.0.0 で
     # 既存 MCP と同じく Tailscale / LAN にも出している（4100〜4103 は既存 MCP / cosense-mcp 管理画面）。
     # 外から来る Host は MCP_ALLOWED_HOSTS で絞られる。
+    # 内部 REST（INTERNAL_API_PORT、既定 3001）は**わざと publish しない**。
+    # Docker ネットワーク内（health-ojimpo の backend）からだけ http://scrobble-gateway:3001 で届く。
     ports:
       - "${MCP_BIND_ADDRESS:-127.0.0.1}:${MCP_PUBLIC_PORT:-4104}:${MCP_PORT:-3000}"
     # scrobble のマスター DB。named volume ではなく bind mount にして、

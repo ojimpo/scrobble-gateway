@@ -6,6 +6,7 @@ import { loadConfig } from "./config.js";
 import { HistoryRepository } from "./history-repository.js";
 import { HistorySyncScheduler } from "./history-sync-scheduler.js";
 import { createHttpApp } from "./http-app.js";
+import { createInternalApi } from "./internal-api.js";
 import { IntelligenceRepository } from "./intelligence-repository.js";
 import { IntelligenceService } from "./intelligence-service.js";
 import { LastFmClient } from "./lastfm-client.js";
@@ -96,6 +97,13 @@ const { app, oauth } = createHttpApp({
 const httpServer = app.listen(config.port, config.host, () => {
   console.log(`Last.fm MCP listening on http://${config.host}:${config.port}/mcp for ${config.lastfmUsername}`);
 });
+// 0 disables it. Not published by compose: reachable only on the Docker network.
+const internalServer = config.internalApiPort === 0
+  ? undefined
+  : createInternalApi(rangeAnalytics, config.lastfmUsername, () => service.getHistoryStatus())
+    .listen(config.internalApiPort, config.host, () => {
+      console.log(`Internal API listening on http://${config.host}:${config.internalApiPort}`);
+    });
 historyScheduler?.start();
 music.scheduler?.start();
 
@@ -105,6 +113,7 @@ async function shutdown(signal: string): Promise<void> {
   shuttingDown = true;
   console.log(`Received ${signal}; shutting down`);
   httpServer.close();
+  internalServer?.close();
   await handler.close();
   oauth?.store.flush();
   await historyScheduler?.stop();
