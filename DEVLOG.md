@@ -4,6 +4,16 @@
 
 ## 2026-10-04
 
+- **22:58 既存 Last.fm MCP の比較表を Cosense に追記** — 「ChatGPT DeepResearchも併用する？」「とりあえず依頼文だけここに出してよ」
+  - Deep Research の結果を下敷きにして、GitHub API でソースを直接確認した。比較表の正本は Cosense `Last.fm MCP・音楽レコメンド基盤 NAS調査引継ぎ` の「既存Last.fm MCPの比較」節
+  - **最有力は sptmru/lastfm-mcp（改変して流用）。** [確] TypeScript・MIT、自前 SQLite（`node:sqlite`）に全履歴を持ち、差分同期・集計・MCP をまとめた構成で、scrobble-gateway とほぼ同じ形。テスト17本、Dockerfile・compose あり。Spotify Like→Last.fm Love 同期も実装済み（既定は dry-run）
+  - [確] **sptmru も差分同期の起点が「最新scrobbleの時刻」なので、今日 health-ojimpo で直したのと同じ後着 scrobble の取りこぼしを抱えている。** 流用するならまずここを直す
+  - [確] sptmru は MCP SDK v2 系（`@modelcontextprotocol/server`）。health-mcp の足場は v1 系なので、「足場は health-mcp を流用」の前提と食い違う
+  - rianvdm（49スター、Cloudflare Workers・OAuth 前提）、ndyakov（Go）、kud（stdio のみ）は設計だけ参考。dkfancska・ScrobblerContext は不採用
+  - **Deep Research の結果はそのまま使えなかった。** [確] rianvdm のスター数（「ほぼ0」→ 実際は49）、kud のテスト有無（「無し」→ 実際はあり）、lastfm-ts-api を「公式」とした点が誤り。sptmru の流用範囲も過小評価していた。README を読んだだけの記述が多く、現物での裏取りは必須
+  - 未確定（本人判断）: A = sptmru をベースに足す / B = health-mcp の足場で自作して sptmru から移植する
+  - 罠: 調査用のバックグラウンドエージェントが 21:49 を最後に、完了通知も無いまま消えていた。呼んだツールは全部結果を返していて、どこかで詰まった形跡も無い。**完了通知が来ないときは、subagents/ の jsonl の最終時刻を見て生死を確かめる**
+
 - **22:30 health-ojimpo 側の取りこぼしをその場で修正** — 「今直そう」「やっていいよ　全部」
   - 移行を待たずに旧取り込みを直した。移行完了まで health-ojimpo が scrobble の正本なので、抜けたまま新基盤へコピーすると照合がずっとずれる
   - 修正は「差分取得を直近72時間遡る」（health-ojimpo `1aa7da0` / テスト `58b1deb` / CLAUDE.md `a6ee26e`、push 済み）。22:19 の毎時 ingest 完了を待って backend を差し替え、事前に `data/health.db.bak-20261004-lookback` を取った
