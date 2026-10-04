@@ -108,7 +108,7 @@ sudo systemctl restart cloudflared
 
 - **上流の期間比較（`compare_listening_periods`）と期間別トップ（`get_top_*`）は Last.fm の固定期間（7day / 1month / 12month など）しか受けず、しかも Last.fm API をその場で叩く**。任意の from/to 用に `get_top_in_range` / `compare_ranges` を足した（`src/range-analytics.ts`、`src/register-range-tools.ts`）。上流のツールの意味は変えていない
 - 日付の `YYYY-MM-DD` は**UTC の1日**として解釈される（上流の `parseDateTime`）。日本時間の日で区切るなら `+09:00` 付きの ISO 8601 を渡す。ツールの説明文にも書いてある
-- **名寄せは日本語表記と英語表記をまとめない**（エイプリルブルー / AprilBlue、宇多田ヒカル / Hikaru Utada）。MBID が無いと別アーティストとして数えられる。未対応
+- **名寄せは日本語表記と英語表記をまとめない**（エイプリルブルー / AprilBlue、宇多田ヒカル / Hikaru Utada）。MBID が無いと別アーティストとして数えられる。**LLM がおおむね吸収できるので当面やらない**（2026-10-05 本人判断）。読み違いが出たら別名の対応表を足す
 - Spotify Liked との重なりは、Spotify 連携（未設定）を有効にすれば `compare_spotify_lastfm_library` がある
 - Last.fm 側の Loved は使っていない（Like は Spotify が正本）
 
