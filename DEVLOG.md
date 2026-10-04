@@ -2,6 +2,24 @@
 
 意思決定を日付つきで積む（新しい日付が上、追記のみ）。確度: `[確]` = 実測、無印 = 判断。
 
+## 2026-10-05
+
+- **03:35 任意期間ツールと OAuth を足し、公開の直前まで進めた** — 「リポジトリはこのタイミングで作ろう」「2→3進もう」
+  - [確] GitHub に `ojimpo/scrobble-gateway` を **private** で作成。公開は README を日本語で書き直してから（上流の英語 README のままなので）
+  - `get_top_in_range` / `compare_ranges` を追加。**上流のツールの意味は変えず、新しいツールとして足した。** 上流の修正を取り込むときに衝突しにくくするため
+    - [確] 9月（JST）2,129再生・8月 1,110再生。スピッツ 44→227、Oma が新規 156。応答 0.1秒未満
+    - `YYYY-MM-DD` は上流の `parseDateTime` に合わせて UTC の1日。日本時間で区切るなら `+09:00` を付ける（ツール説明に明記）
+    - 名寄せは日本語表記と英語表記をまとめない（エイプリルブルー / AprilBlue、宇多田ヒカル / Hikaru Utada）。未対応
+  - [確] Tailscale（100.85.219.71 / arigato-nas）から 32 ツールが見える。`MCP_ALLOWED_HOSTS` に無い Host は 403
+  - **認証は OAuth に決定**（「OAuth」）、ホスト名は `scrobble-gateway.ojimpo.com`（「scrobble-gateway.ojimpo.com」）
+    - 私は「認証なし」を推した（health-mcp と同じ運用、すぐ公開できる）が、本人は OAuth を選んだ。聴取履歴を URL を知る誰でも読める状態にしない
+    - **cosense-mcp の認可サーバーを1人用に絞って移植した**（`9df19c3`）。新規に書くより、ChatGPT と claude.ai の両方で通した実績と踏んだ罠ごと持ってくるほうが速くて確実
+    - [確] **SDK v2 にはトークン検証側しか無く、認可サーバー（DCR / authorize / token）が無い。** そこだけ SDK v1 の `mcpAuthRouter` を依存に足した。v2 で自前実装する案は、cosense-mcp の罠を全部踏み直すことになるので却下
+    - テスト17件（DCR→同意→トークン→/mcp、iss の完全一致、CSP、コード再利用での失効、回数制限など）
+    - 罠: 最初のテストは11件落ちた。設定の URL をポート確定前に作っていて、認可ルーターが組み立て時に読んだ値（ポート無し）と食い違っていた。先にポートを取ってから組み立てる形に直した
+  - [確] DNS の CNAME は `cloudflared tunnel route dns` で作成（sudo 不要）。ingress の追記は sudo が要るので本人作業。差分はコピーで検証済み
+  - 罠: `cloudflared tunnel ingress rule <url> --config <file>` の順だと `--config` が効かず、既定ルールで照合されて「404 に当たる」と出る。`cloudflared tunnel --config <file> ingress rule <url>` の順にする
+
 ## 2026-10-04
 
 - **23:43 sptmru/lastfm-mcp を土台に取り込み、ループバック限定で稼働開始** — 「Aでやろう」

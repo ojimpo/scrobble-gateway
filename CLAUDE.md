@@ -13,8 +13,9 @@ Last.fm データの唯一の窓口になる独立サービス。Last.fm API キ
 
 ## 状態
 
-**2026-10-05: arigato-nas の 4104 番で稼働中（Tailscale / LAN 内、認証なし）。** 全履歴 95,105件を Last.fm から取得済みで、health.db と1件残らず一致。毎時の差分同期が動いている。
-health-ojimpo はまだ旧取り込みのまま（内部 REST 未実装）。Cloudflare Tunnel での外部公開と認証方式は未決定。GitHub は `ojimpo/scrobble-gateway`（private）。
+**2026-10-05: arigato-nas の 4104 番で稼働中。`/mcp` は OAuth 必須。** 全履歴 95,105件を Last.fm から取得済みで、health.db と1件残らず一致。毎時の差分同期が動いている。
+公開ホスト名は `scrobble-gateway.ojimpo.com`（DNS の CNAME は作成済み。Tunnel の ingress 追記は sudo が要るので本人作業）。
+health-ojimpo はまだ旧取り込みのまま（内部 REST 未実装）。GitHub は `ojimpo/scrobble-gateway`（private）。
 仕様・判断履歴の正本は Cosense `Last.fm MCP・音楽レコメンド基盤 NAS調査引継ぎ`。経過は DEVLOG.md。
 
 ## 土台: sptmru/lastfm-mcp（MIT）を履歴ごと取り込んでいる
@@ -26,6 +27,34 @@ health-ojimpo はまだ旧取り込みのまま（内部 REST 未実装）。Clo
   - 起動時と毎時の自動同期（`src/history-sync-scheduler.ts`）。上流はツールか CLI で手動同期する作り
   - 名寄せ表の MBID インデックスと、名寄せを同期直後に回す変更（下の落とし穴）
 - MCP SDK は v2 系（`@modelcontextprotocol/server`）。health-mcp ほか既存の自作 MCP（v1 系 `@modelcontextprotocol/sdk`）とは別物。トランスポートは Streamable HTTP のみで stdio は無い
+
+## 認証（OAuth 2.1）
+
+- **リモート公開の認証は OAuth 一択。** ChatGPT のコネクタは OAuth しか受けず、claude.ai のカスタムコネクタは固定の Bearer トークンを送れない（2026-10-05 の判断。cosense-mcp と同じ結論）
+- 実装は `src/auth/`。**cosense-mcp の認可サーバーを1人用に絞って移植したもの**。利用者ディレクトリ・招待・SID の暗号化保存は持ってきていない。パスフレーズ1つで認可する
+- **SDK v2 にはトークン検証側（`requireBearerAuth`）しか無く、認可サーバー（DCR / `/authorize` / `/token`）が無い。** そこだけ SDK v1（`@modelcontextprotocol/sdk`）の `mcpAuthRouter` を使っている。MCP 本体は v2 のまま
+- 設定は `.env` の `MCP_PUBLIC_URL` と `MCP_OAUTH_PASSPHRASE`（**両方そろって初めて有効、片方だけなら起動を拒否**）。パスフレーズは `grep MCP_OAUTH_PASSPHRASE ~/dev/scrobble-gateway/.env` で見る
+- **認証の設定が無いと HTTP の起動自体を拒否する**（`MCP_ALLOW_UNAUTHENTICATED=true` で明示的に外せる）。cosense-mcp で「設定は書いてあるのに認証が載っていない」まま公開していた事故の再発防止
+- クライアント登録とトークンのハッシュは `./data/oauth-store.json`。消すと全クライアントが再認可になる
+- `/healthz` は認証なしで開いている（件数・最新時刻・ユーザー名が見える）
+- cosense-mcp から引き継いだ罠（コメントにも書いてある）
+  - AS メタデータに `authorization_response_iss_parameter_supported` を足す。無いと ChatGPT がコールバックごとに別のリダイレクト URI を使う。上書きのルーターは `mcpAuthRouter` より**先に**載せる
+  - リダイレクトの `iss` は `issuerUrl.href`（末尾スラッシュ付き）と完全一致させる。ずれると ChatGPT が承認後に黙ってやり直す
+  - 同意画面の CSP の `form-action` にリダイレクト先のオリジンを入れる。無いと承認ボタンが無反応に見える（ブラウザでしか再現しない）
+  - リクエストログは OAuth ルーターより先に載せる。後ろだと `/authorize` などがログに残らない
+- Tunnel 越しのパスフレーズ試行の回数制限は接続元 IP で数えるので `MCP_TRUST_PROXY=1`
+
+### Cloudflare Tunnel への追加（sudo、本人作業）
+
+```bash
+sudo cp /etc/cloudflared/config.yml /etc/cloudflared/config.yml.bak.$(date +%Y%m%d-%H%M%S)
+sudo sed -i '/service: http:\/\/localhost:4102/a\  - hostname: scrobble-gateway.ojimpo.com\n    service: http://localhost:4104' /etc/cloudflared/config.yml
+cloudflared tunnel --config /etc/cloudflared/config.yml ingress rule https://scrobble-gateway.ojimpo.com/mcp   # → localhost:4104 なら OK
+sudo systemctl restart cloudflared
+```
+
+- DNS（CNAME）は `cloudflared tunnel route dns <tunnel-id> scrobble-gateway.ojimpo.com` で作成済み（`~/.cloudflared/cert.pem` があるので sudo 不要）
+- **`cloudflared tunnel ingress rule` は `--config` を `tunnel` の直後に置く。** `ingress rule ... --config` の順だと設定が読まれず、既定のルールで照合されて 404 に見える
 
 ## コマンド
 
