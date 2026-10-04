@@ -1,0 +1,41 @@
+{
+  "name": "lastfm-mcp",
+  "version": "0.3.0",
+  "description": "A personal Last.fm taste and listening-history MCP server over Streamable HTTP.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "npm run typecheck && npm test && npm run build",
+    "dev": "tsx watch src/index.ts",
+    "dev:sync": "tsx src/sync.ts",
+    "start": "node dist/src/index.js",
+    "sync": "node dist/src/sync.js",
+    "auth": "tsx src/auth.ts",
+    "auth:built": "node dist/src/auth.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/express": "^2.0.0",
+    "@modelcontextprotocol/node": "^2.0.0",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "dotenv": "^17.2.1",
+    "express": "^5.2.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.1.2",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "overrides": {
+    "@hono/node-server": "2.1.0"
+  },
+  "license": "MIT"
+}

@@ -1,1 +1,17 @@
+node_modules/
+dist/
+.env
+data/
+coverage/
+logs/
+*.log
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+spotify-tokens.json*
+spotify-rate-limit.json*
+lastfm-session.json*
+music-sync-status.json*
+
+# scrobble-gateway
 .claude/worktrees/
