@@ -15,7 +15,7 @@ Last.fm データの唯一の窓口になる独立サービス。Last.fm API キ
 
 **2026-10-05: arigato-nas の 4104 番で稼働中。`/mcp` は OAuth 必須。** 全履歴 95,105件を Last.fm から取得済みで、health.db と1件残らず一致。毎時の差分同期が動いている。
 **2026-10-05 から `https://scrobble-gateway.ojimpo.com/mcp` で公開中**（Cloudflare Tunnel。OAuth の一連の流れを公開 URL 越しに確認済み）。
-health-ojimpo はまだ旧取り込みのまま（内部 REST 未実装）。GitHub は `ojimpo/scrobble-gateway`（public）。README は だ・である調の日本語（本人指定）。上流の英語 README は `docs/upstream-README.md` に残してある（ツール一覧の参照用）。
+**2026-10-05 に health-ojimpo を切り替え済み**（移行順序の 4〜5）。health-ojimpo は Last.fm API を叩かず、内部 REST から日次件数だけを受け取る。GitHub は `ojimpo/scrobble-gateway`（public）。README は だ・である調の日本語（本人指定）。上流の英語 README は `docs/upstream-README.md` に残してある（ツール一覧の参照用）。
 仕様・判断履歴の正本は Cosense `Last.fm MCP・音楽レコメンド基盤 NAS調査引継ぎ`。経過は DEVLOG.md。
 
 ## 土台: sptmru/lastfm-mcp（MIT）を履歴ごと取り込んでいる
@@ -57,6 +57,13 @@ sudo systemctl restart cloudflared
 - **Python の `urllib` で公開 URL を叩くと Cloudflare に 403 で弾かれる**（既定の User-Agent がボット扱い）。アプリには届いていないのでログにも出ない。検証スクリプトでは `User-Agent` を付ける。curl は通る
 - **`cloudflared tunnel ingress rule` は `--config` を `tunnel` の直後に置く。** `ingress rule ... --config` の順だと設定が読まれず、既定のルールで照合されて 404 に見える
 
+## 内部 REST（health-ojimpo 向け）
+
+- `src/internal-api.ts`。**別ポート `INTERNAL_API_PORT`（既定 3001）で待ち受け、compose は publish しない**。Docker ネットワーク（`health-ojimpo_default`）の中から `http://scrobble-gateway:3001` でだけ届く。Tunnel を通らないので OAuth は無い
+- `GET /daily-plays?from=YYYY-MM-DD&to=YYYY-MM-DD` → UTC の日ごとの件数と同期状態（`newestScrobbleAt` / `coveredThroughAt` / `fullHistorySynced`）。両端含む、どちらも省略可
+- **返すのは派生値だけにする。** 利用者側に scrobble の完全な写しを作らせないのが、このサービスを独立させた理由そのもの
+- health-ojimpo は UTC 日付で集計してきたので UTC で返している。JST にするなら health-ojimpo 側の過去の集計ごと変わる
+
 ## コマンド
 
 - テスト: `npm test`（vitest）。型チェック: `npm run typecheck`。Node 22.5+ が要る（`node:sqlite`）
@@ -69,9 +76,9 @@ sudo systemctl restart cloudflared
 
 1. health.db バックアップ → 件数照合（2026-10-04 済み）
 2. ~~既存件数をコピー → バックフィル~~ → **Last.fm から全件を直接取得した**（2026-10-04 済み。health.db からのコピーはやめた。Last.fm が正本で、取得は7分で終わるため）
-3. 非公開のまま集計を既存 DB と照合（件数は 2026-10-04 に一致を確認済み。日次再生時間の照合は内部 REST を作ってから）
-4. health-ojimpo を内部 REST 利用へ変更
-5. 旧取り込み停止と新取り込み開始を**同一切替**で行う（二重取り込みを作らない）
+3. 非公開のまま集計を既存 DB と照合（2026-10-05 済み。日次件数 1,933日分のうち違うのは health.db 側の大文字小文字重複がある4日だけ）
+4. health-ojimpo を内部 REST 利用へ変更（2026-10-05 済み）
+5. 旧取り込み停止と新取り込み開始を**同一切替**で行う（2026-10-05 済み。backend の差し替え1回で両方が同時に起きる作りにした）
 6. stdio / Tailscale 内で MCP 検証 → 4104 番と Cloudflare Tunnel（sudo、config.yml のバックアップ必須）
 7. claude.ai / ChatGPT から実際に呼ぶ
 
