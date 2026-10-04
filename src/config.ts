@@ -30,6 +30,9 @@ const envSchema = z.object({
   HISTORY_INCREMENTAL_LOOKBACK_HOURS: z.coerce.number().int().min(0).max(24 * 30).default(72),
   HISTORY_AUTO_SYNC_ENABLED: z.string().trim().toLowerCase().pipe(z.enum(["true", "false"])).transform((value) => value === "true").default(true),
   HISTORY_AUTO_SYNC_INTERVAL_SECONDS: z.coerce.number().int().min(300).max(86_400).default(3_600),
+  LIKE_LOVE_SYNC: z.enum(["off", "dry-run", "on"]).default("off"),
+  LIKE_LOVE_WINDOW_HOURS: z.coerce.number().int().min(1).max(24 * 30).default(72),
+  LIKE_LOVE_LIKED_CACHE_HOURS: z.coerce.number().min(0).max(24 * 7).default(6),
 });
 
 export type AppConfig = {
@@ -56,6 +59,9 @@ export type AppConfig = {
   historyIncrementalLookbackSeconds: number;
   historyAutoSyncEnabled: boolean;
   historyAutoSyncIntervalMs: number;
+  likeLoveMode: "off" | "dry-run" | "on";
+  likeLoveWindowSeconds: number;
+  likeLoveLikedCacheMs: number;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -90,6 +96,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     historyIncrementalLookbackSeconds: parsed.HISTORY_INCREMENTAL_LOOKBACK_HOURS * 60 * 60,
     historyAutoSyncEnabled: parsed.HISTORY_AUTO_SYNC_ENABLED,
     historyAutoSyncIntervalMs: parsed.HISTORY_AUTO_SYNC_INTERVAL_SECONDS * 1_000,
+    likeLoveMode: parsed.LIKE_LOVE_SYNC,
+    likeLoveWindowSeconds: parsed.LIKE_LOVE_WINDOW_HOURS * 60 * 60,
+    likeLoveLikedCacheMs: parsed.LIKE_LOVE_LIKED_CACHE_HOURS * 60 * 60 * 1_000,
   };
 }
 

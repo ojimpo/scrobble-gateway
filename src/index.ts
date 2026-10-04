@@ -14,6 +14,7 @@ import { ListeningService } from "./listening-service.js";
 import { createLastFmMcpServer } from "./mcp-server.js";
 import { MusicBrainzClient } from "./musicbrainz-client.js";
 import { RangeAnalytics } from "./range-analytics.js";
+import { RecentLikeLoveSync, type LikeLoveSummary } from "./recent-like-love-sync.js";
 import { createMusicRuntime } from "./music-runtime.js";
 
 const config = loadConfig();
@@ -53,6 +54,22 @@ const intelligence = new IntelligenceService(
   config.mutationsEnabled,
 );
 
+const music = createMusicRuntime(config);
+if (config.likeLoveMode !== "off") {
+  if (!music.spotify) throw new Error("LIKE_LOVE_SYNC requires SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET");
+  // Upstream's whole-library sync would love every liked track at once, which
+  // is exactly what the recent-plays-only sync exists to avoid.
+  if (music.config.autoSyncEnabled) throw new Error("LIKE_LOVE_SYNC cannot run together with SPOTIFY_AUTO_SYNC_ENABLED=true; set it to false");
+}
+const likeLove = config.likeLoveMode !== "off" && music.spotify
+  ? new RecentLikeLoveSync(config.historyDbPath, config.lastfmUsername, music.spotify, music.lastfm, {
+    mode: config.likeLoveMode,
+    windowSeconds: config.likeLoveWindowSeconds,
+    likedCacheMs: config.likeLoveLikedCacheMs,
+  })
+  : undefined;
+let lastLikeLove: (LikeLoveSummary & { at: string }) | { error: string; at: string } | undefined;
+
 const historyScheduler = config.historyAutoSyncEnabled
   ? new HistorySyncScheduler(
     service.syncService,
@@ -60,11 +77,19 @@ const historyScheduler = config.historyAutoSyncEnabled
     config.lastfmUsername,
     config.historyMaxSyncTracks,
     config.historyAutoSyncIntervalMs,
-    () => intelligenceRepository.ensureCanonicalIndex(config.lastfmUsername),
+    async () => {
+      intelligenceRepository.ensureCanonicalIndex(config.lastfmUsername);
+      if (!likeLove) return;
+      try {
+        lastLikeLove = { ...(await likeLove.run()), at: new Date().toISOString() };
+      } catch (error) {
+        lastLikeLove = { error: error instanceof Error ? error.message : "Like → Love sync failed", at: new Date().toISOString() };
+      }
+      console.log(JSON.stringify({ event: "like_love_sync", ...lastLikeLove }));
+    },
   )
   : undefined;
 
-const music = createMusicRuntime(config);
 const rangeAnalytics = new RangeAnalytics(config.historyDbPath);
 const handler = createMcpHandler(() => createLastFmMcpServer(service, intelligence, music, {
   analytics: rangeAnalytics,
@@ -87,6 +112,7 @@ const { app, oauth } = createHttpApp({
     mutationsEnabled: config.mutationsEnabled,
     history: service.getHistoryStatus(),
     historyAutoSync: historyScheduler?.getStatus() ?? { enabled: false },
+    likeLove: { mode: config.likeLoveMode, last: lastLikeLove ?? null },
     oauth: oauthConfig !== undefined,
   }),
   ...(oauthConfig ? { oauth: oauthConfig } : {}),
@@ -119,6 +145,7 @@ async function shutdown(signal: string): Promise<void> {
   await historyScheduler?.stop();
   await music.scheduler?.stop();
   rangeAnalytics.close();
+  likeLove?.close();
   intelligenceRepository.close();
   history.close();
 }

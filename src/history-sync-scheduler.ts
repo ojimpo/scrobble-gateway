@@ -28,7 +28,7 @@ export class HistorySyncScheduler {
     private readonly intervalMs: number,
     // Runs after every successful sync. Used to build the canonical index in
     // the background so the first analytics tool call does not pay for it.
-    private readonly afterSync?: () => void,
+    private readonly afterSync?: () => void | Promise<void>,
   ) {}
 
   start(): void {
@@ -68,7 +68,7 @@ export class HistorySyncScheduler {
         pagesFetched: result.pagesFetched,
         completedRequestedRange: result.completedRequestedRange,
       };
-      this.afterSync?.();
+      await this.afterSync?.();
     } catch (error) {
       this.status.error = error instanceof Error ? error.message : "Automatic history sync failed";
     } finally {
