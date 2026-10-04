@@ -4,6 +4,22 @@
 
 ## 2026-10-04
 
+- **23:43 sptmru/lastfm-mcp を土台に取り込み、ループバック限定で稼働開始** — 「Aでやろう」
+  - 取り込み方は**履歴ごと merge**（`b9eeaa0`）。コピーではなく merge にしたのは、作者の履歴を残すのと、`upstream` リモートから上流の修正を後で取り込めるようにするため
+  - [確] 上流のテストは手元で全部パス（106件）。上流から変えたのは3点で、それぞれテスト付き
+    - `effaaa0` 差分同期を直近72時間遡る。上流も health-ojimpo と同じく「最新 scrobble の秒」から取っていて、後着分を落とす作りだった。上限付きのバックログ処理は遡ると同じ最古区間を読み直し続けるので、窓が上限を超える回だけ従来のカーソルに戻す
+    - `d34e501` 起動時と毎時の自動同期。上流はツールか CLI で手で同期する作りで、索引が勝手に新しくならない
+    - `6094794` 名寄せ表の MBID インデックス（下の罠）
+  - [確] 起動直後の自動 full 同期で 476ページ・95,130件を7分で取得し、主キーで重複が吸収されて 95,105件。**health.db（大文字小文字違いの重複5件を除くと 95,105件）と1件残らず一致**
+  - **health.db からのコピーはやめて、Last.fm から直接全件取った。** 当初の移行順序は「既存件数をコピー → 不足分をバックフィル」だったが、Last.fm が正本で、全件取得は7分で終わる。コピーすると health-ojimpo 側の表記揺れ（大文字小文字）まで持ち込む
+  - [確] コンテナログに API キーは出ていない
+  - 罠1: `docker compose up` が `all predefined address pools have been fully subnetted` で失敗。arigato-nas は Docker の既定アドレスプールを使い切っている。health-mcp と同じく `health-ojimpo_default` に相乗りした（`9308667`）。health-ojimpo から内部 REST を呼ぶときもこの経路を使うので、結果的にちょうどよい
+  - 罠2: **最初の分析ツール呼び出しでサーバーが CPU 100% のまま固まり、`/healthz` も返らなくなった。** 上流の `ensureCanonicalIndex` は scrobble 1件ごとに名寄せ表を MBID で引くが、その列にインデックスが無く毎回全件走査していた。[確] 実測で1秒67件、95,105件で25分超。インデックスを張ると22秒。同期 API の SQLite なので、走っている間はイベントループごと止まる。上流の作者は履歴が少なくて気づかなかったと読める（推測）
+    - 追加したテストが最初はインデックス無しでも通った。主キーの先頭が `username` なので、`EXPLAIN QUERY PLAN` に「USING INDEX」は出る。インデックス名で判定するように直した
+  - **上流と要件の差が見つかった。** `compare_listening_periods` と `get_top_*` は Last.fm の固定期間しか受けず、しかも Last.fm をその場で叩く。任意の from/to で自前 DB を集計できるのは timeline / matrix だけ。曲単位の任意期間トップと任意期間の比較は足す必要がある（未着手）
+  - 上流の Spotify Like→Last.fm Love 同期はライブラリ全体を突き合わせる方式で、ここで決めた増分方式とは違う。Spotify の認証情報を入れると自動同期が既定で有効になるので注意（CLAUDE.md に記録）
+  - 未着手: health-ojimpo 向け内部 REST、Tailscale 内での検証、認証、Cloudflare Tunnel、README の書き直し、GitHub リポジトリ作成
+
 - **22:58 既存 Last.fm MCP の比較表を Cosense に追記** — 「ChatGPT DeepResearchも併用する？」「とりあえず依頼文だけここに出してよ」
   - Deep Research の結果を下敷きにして、GitHub API でソースを直接確認した。比較表の正本は Cosense `Last.fm MCP・音楽レコメンド基盤 NAS調査引継ぎ` の「既存Last.fm MCPの比較」節
   - **最有力は sptmru/lastfm-mcp（改変して流用）。** [確] TypeScript・MIT、自前 SQLite（`node:sqlite`）に全履歴を持ち、差分同期・集計・MCP をまとめた構成で、scrobble-gateway とほぼ同じ形。テスト17本、Dockerfile・compose あり。Spotify Like→Last.fm Love 同期も実装済み（既定は dry-run）
