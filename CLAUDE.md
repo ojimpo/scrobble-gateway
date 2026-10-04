@@ -15,7 +15,7 @@ Last.fm データの唯一の窓口になる独立サービス。Last.fm API キ
 
 **2026-10-05: arigato-nas の 4104 番で稼働中。`/mcp` は OAuth 必須。** 全履歴 95,105件を Last.fm から取得済みで、health.db と1件残らず一致。毎時の差分同期が動いている。
 公開ホスト名は `scrobble-gateway.ojimpo.com`（DNS の CNAME は作成済み。Tunnel の ingress 追記は sudo が要るので本人作業）。
-health-ojimpo はまだ旧取り込みのまま（内部 REST 未実装）。GitHub は `ojimpo/scrobble-gateway`（private）。
+health-ojimpo はまだ旧取り込みのまま（内部 REST 未実装）。GitHub は `ojimpo/scrobble-gateway`（public）。README は だ・である調の日本語（本人指定）。上流の英語 README は `docs/upstream-README.md` に残してある（ツール一覧の参照用）。
 仕様・判断履歴の正本は Cosense `Last.fm MCP・音楽レコメンド基盤 NAS調査引継ぎ`。経過は DEVLOG.md。
 
 ## 土台: sptmru/lastfm-mcp（MIT）を履歴ごと取り込んでいる
