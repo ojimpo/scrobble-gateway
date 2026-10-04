@@ -4,6 +4,13 @@
 
 ## 2026-10-04
 
+- **22:30 health-ojimpo 側の取りこぼしをその場で修正** — 「今直そう」「やっていいよ　全部」
+  - 移行を待たずに旧取り込みを直した。移行完了まで health-ojimpo が scrobble の正本なので、抜けたまま新基盤へコピーすると照合がずっとずれる
+  - 修正は「差分取得を直近72時間遡る」（health-ojimpo `1aa7da0` / テスト `58b1deb` / CLAUDE.md `a6ee26e`、push 済み）。22:19 の毎時 ingest 完了を待って backend を差し替え、事前に `data/health.db.bak-20261004-lookback` を取った
+  - 3/9 以降を手動トリガー（`POST /api/ingest/trigger`、from_date=2026-03-09）で一度だけ取り直した。[確] 17,178件取得、95,098 → 95,110件
+  - [確] 取り直し後に 2026-03 以降を日単位で再照合。**Last.fm にあってローカルに無いものは 0 件**。残る差はローカル側の大小文字違いの重複 5 件（Rosa Walton）だけ
+  - 踏んだ罠: `docker compose exec backend python -c "run_ingest_pipeline(...)"` は `Unknown source: lastfm` で何もしない。アダプタはアプリ起動時に登録されるので、別プロセスからは見えない。手動取り込みは HTTP の trigger を使う
+
 - **22:08 Last.fm 全履歴と health.db の照合（読み取りのみ）** — lab-7b からの引き継ぎ「登録日・総 scrobble 数と health.db を照合し、2021-01-24 以前のバックフィル要否を判断材料として出す」
   - [確] user.getInfo: playcount 95,129（照合中に 95,130 へ増加）、登録 2021-01-24 23:03:22 UTC。health.db は 95,097件、最古 2021-01-24 11:34:33 UTC
   - **2021-01-24 より前のバックフィルは不要。** [確] Last.fm 側も 2021 年より前は 0 件
