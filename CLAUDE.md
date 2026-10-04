@@ -115,11 +115,14 @@ sudo systemctl restart cloudflared
 
 ## Like → Love 同期（直近の再生のみ）
 
+- **2026-10-05 から `on` で稼働中。** 初回に 35 曲へ Love を付けた（dry-run で本人が候補を確認してから）
 - `src/recent-like-love-sync.ts`。毎時の履歴同期の直後（スケジューラの afterSync）に走る。直近 `LIKE_LOVE_WINDOW_HOURS`（既定72）に再生した未 Love の曲を Spotify の Like 一覧と突き合わせ、exact / normalized_exact 一致だけ `track.love`
 - `LIKE_LOVE_SYNC=off|dry-run|on`。dry-run の候補は `like_love_log`（status=would_love）とログの `like_love_would_love` に出る。結果は `/healthz` の `likeLove`
 - **上流の `SPOTIFY_AUTO_SYNC_ENABLED` は false にしておく**（Spotify の認証情報を入れると既定 true になり、Like 全件を Love する）。両方有効だと起動を拒否する
 - Spotify アプリは health-ojimpo と同じもの（ダッシュボード上の名前は **`arigato-nas-spotify-liked-delta-export`**。昔の用途の名前だが、2026-10-05 時点でダッシュボードから名前を変えられなかった。Client ID は `e91359…`）を使い、**トークンは別に取る**（リフレッシュトークンのローテーションで共用すると片方が死ぬ）。リダイレクト URI は `http://127.0.0.1:8888/callback`
 - 認証（対話式、本人がターミナルで）: `docker compose exec scrobble-gateway node dist/src/auth.js spotify` / `... lastfm`。トークンは `./data/spotify-tokens.json`・`./data/lastfm-session.json`。Last.fm の書き込みには `.env` の `LASTFM_API_SECRET` が要る
+- **Last.fm の API キーは scrobble-gateway 専用のもの**（2026-10-05 に `scrobble-gateway` という名前で新規作成）。旧キー（health-ojimpo の `.env` にあるもの）は Shared secret が API アカウントの画面のどこにも見当たらず、作成時にしか表示されない作りと判断して作り直した。旧キーは 10/19 の片付けで消す
+- **API key と Shared secret はどちらも 32 桁の英数字で取り違えやすい。** 2026-10-05 に一度 API key を Secret 欄に入れて、認証が `Invalid` で落ちた
 
 ## 後回しにしたもの
 

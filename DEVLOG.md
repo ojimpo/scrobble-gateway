@@ -4,6 +4,15 @@
 
 ## 2026-10-05
 
+- **08:10 Like→Love 同期を on にした** — 「問題ないのでonにしよう」
+  - 本人作業: Spotify ダッシュボードにリダイレクト URI を追加（アプリ名 `arigato-nas-spotify-liked-delta-export` は変えようとしたが変えられなかった）、Spotify と Last.fm の認証 CLI
+  - [確] Spotify の認証後、API で Like 済み 5,199 曲が見えることを確認。認証 CLI は完了時に目立つ表示が無く、本人には「貼ったけど？」と見えた。トークンファイルの有無と実際の API 呼び出しで確認した
+  - 罠: 最初は Shared secret の欄に **API key を入れていて**、`auth.getSession` が Invalid で落ちた。`.env` の2つの値が一致していることで判明（値は出さずに比較した）。`auth.getToken` は署名が違っても通るので、そこでは気づけない
+  - 旧 API キーの Shared secret は API アカウントの画面で見つからず、作成時にしか表示されない作りと判断。**scrobble-gateway 専用の API アカウントを新しく作った。** 「API キーは scrobble-gateway に1つ」という方針にもこちらのほうが合う。旧キーは 10/19 の片付けで消す
+  - [確] dry-run: 直近72時間の未 Love 144曲のうち、Like 済みと確実に一致したのが35曲。本人が一覧を確認して OK
+  - [確] on: 35曲に Love を付け、エラー0。Last.fm の Loved は 432曲になった（2025-10 まで手で付けていた分を含む）
+  - dry-run で候補に出た1曲（ん・フェニ「Merry -band ver-」）は、on に切り替えるまでの9分の間に72時間の窓から外れて Love されなかった。仕様どおり（次に再生したら付く）
+
 - **07:15 上流に PR を2本出し、Like→Love 同期（直近の再生のみ）を入れた** — 「PRはなんか気持ち悪いから一応出しておく？」「PRとりあえず作って」「Like同期は新しく再生した曲限定でいいのでやりたい」
   - 上流 PR: [#1](https://github.com/sptmru/lastfm-mcp/pull/1) MBID インデックス、[#2](https://github.com/sptmru/lastfm-mcp/pull/2) 差分同期の遡り。**片方だけ受け入れられるよう2本に分けた。** 毎時の自動同期・OAuth・任意期間ツール・内部 REST はこちらの運用に寄せた変更なので出していない
     - [確] 上流には CONTRIBUTING も PR テンプレートも無く、PR はこれが初。`Co-Authored-By` の実績も禁止も無いので、本人方針どおりトレーラーを付け、本文にも Claude Code で書いたと明記した
