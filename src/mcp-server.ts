@@ -7,12 +7,19 @@ import { registerIntelligenceTools } from "./register-intelligence-tools.js";
 import { parseDateTime } from "./time.js";
 import { registerMusicTools } from "./register-music-tools.js";
 import type { MusicRuntime } from "./music-runtime.js";
+import type { RangeAnalytics } from "./range-analytics.js";
+import { registerRangeTools } from "./register-range-tools.js";
 
 const periodSchema = z.enum(LASTFM_PERIODS).describe("Last.fm chart period.");
 const topLimitSchema = z.number().int().min(1).max(1_000).default(100);
 const jsonObjectSchema = z.object({}).loose();
 
-export function createLastFmMcpServer(service: ListeningService, intelligence: IntelligenceService, music?: MusicRuntime): McpServer {
+export function createLastFmMcpServer(
+  service: ListeningService,
+  intelligence: IntelligenceService,
+  music?: MusicRuntime,
+  range?: { analytics: RangeAnalytics; username: string },
+): McpServer {
   const server = new McpServer({ name: "lastfm-taste", version: "0.3.0" });
 
   server.registerTool(
@@ -205,6 +212,7 @@ export function createLastFmMcpServer(service: ListeningService, intelligence: I
 
   registerIntelligenceTools(server, intelligence);
   if (music) registerMusicTools(server, music);
+  if (range) registerRangeTools(server, range.analytics, range.username);
 
   return server;
 }

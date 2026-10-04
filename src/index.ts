@@ -11,6 +11,7 @@ import { LastFmClient } from "./lastfm-client.js";
 import { ListeningService } from "./listening-service.js";
 import { createLastFmMcpServer } from "./mcp-server.js";
 import { MusicBrainzClient } from "./musicbrainz-client.js";
+import { RangeAnalytics } from "./range-analytics.js";
 import { createMusicRuntime } from "./music-runtime.js";
 
 const config = loadConfig();
@@ -62,7 +63,11 @@ const historyScheduler = config.historyAutoSyncEnabled
   : undefined;
 
 const music = createMusicRuntime(config);
-const handler = createMcpHandler(() => createLastFmMcpServer(service, intelligence, music));
+const rangeAnalytics = new RangeAnalytics(config.historyDbPath);
+const handler = createMcpHandler(() => createLastFmMcpServer(service, intelligence, music, {
+  analytics: rangeAnalytics,
+  username: config.lastfmUsername,
+}));
 const nodeHandler = toNodeHandler(handler);
 const app = createMcpExpressApp({
   host: config.host,
@@ -100,6 +105,7 @@ async function shutdown(signal: string): Promise<void> {
   await handler.close();
   await historyScheduler?.stop();
   await music.scheduler?.stop();
+  rangeAnalytics.close();
   intelligenceRepository.close();
   history.close();
 }
