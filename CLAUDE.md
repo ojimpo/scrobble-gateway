@@ -13,8 +13,8 @@ Last.fm データの唯一の窓口になる独立サービス。Last.fm API キ
 
 ## 状態
 
-**2026-10-04: arigato-nas でループバック限定で稼働中（127.0.0.1:4104）。** 全履歴 95,105件を Last.fm から取得済みで、health.db と1件残らず一致。毎時の差分同期が動いている。
-health-ojimpo はまだ旧取り込みのまま（内部 REST 未実装）。外部公開・認証は未着手。
+**2026-10-05: arigato-nas の 4104 番で稼働中（Tailscale / LAN 内、認証なし）。** 全履歴 95,105件を Last.fm から取得済みで、health.db と1件残らず一致。毎時の差分同期が動いている。
+health-ojimpo はまだ旧取り込みのまま（内部 REST 未実装）。Cloudflare Tunnel での外部公開と認証方式は未決定。GitHub は `ojimpo/scrobble-gateway`（private）。
 仕様・判断履歴の正本は Cosense `Last.fm MCP・音楽レコメンド基盤 NAS調査引継ぎ`。経過は DEVLOG.md。
 
 ## 土台: sptmru/lastfm-mcp（MIT）を履歴ごと取り込んでいる
@@ -69,7 +69,9 @@ health-ojimpo はまだ旧取り込みのまま（内部 REST 未実装）。外
 
 上流の約30ツールがそのまま出ている（一覧は README）。当初の要件との差:
 
-- **期間比較（`compare_listening_periods`）と期間別トップ（`get_top_*`）は Last.fm の固定期間（7day / 1month / 12month など）しか受けず、しかも Last.fm API をその場で叩く**。任意の from/to で自前 DB を集計できるのは `get_listening_timeline` / `get_listening_matrix`（アーティスト・アルバム単位）だけ。任意期間の曲単位トップと期間比較は足す必要がある
+- **上流の期間比較（`compare_listening_periods`）と期間別トップ（`get_top_*`）は Last.fm の固定期間（7day / 1month / 12month など）しか受けず、しかも Last.fm API をその場で叩く**。任意の from/to 用に `get_top_in_range` / `compare_ranges` を足した（`src/range-analytics.ts`、`src/register-range-tools.ts`）。上流のツールの意味は変えていない
+- 日付の `YYYY-MM-DD` は**UTC の1日**として解釈される（上流の `parseDateTime`）。日本時間の日で区切るなら `+09:00` 付きの ISO 8601 を渡す。ツールの説明文にも書いてある
+- **名寄せは日本語表記と英語表記をまとめない**（エイプリルブルー / AprilBlue、宇多田ヒカル / Hikaru Utada）。MBID が無いと別アーティストとして数えられる。未対応
 - Spotify Liked との重なりは、Spotify 連携（未設定）を有効にすれば `compare_spotify_lastfm_library` がある
 - Last.fm 側の Loved は使っていない（Like は Spotify が正本）
 

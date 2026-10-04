@@ -6,8 +6,9 @@ services:
     env_file:
       - path: .env
         required: false
-    # 認証を決めるまではホストのループバックにだけ出す。Tailscale 内で検証する段階で
-    # MCP_BIND_ADDRESS=0.0.0.0 にする（4100〜4103 は既存 MCP / cosense-mcp 管理画面）。
+    # 既定はループバックだけ。arigato-nas では .env の MCP_BIND_ADDRESS=0.0.0.0 で
+    # 既存 MCP と同じく Tailscale / LAN にも出している（4100〜4103 は既存 MCP / cosense-mcp 管理画面）。
+    # 外から来る Host は MCP_ALLOWED_HOSTS で絞られる。
     ports:
       - "${MCP_BIND_ADDRESS:-127.0.0.1}:${MCP_PUBLIC_PORT:-4104}:${MCP_PORT:-3000}"
     # scrobble のマスター DB。named volume ではなく bind mount にして、
