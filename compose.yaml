@@ -26,3 +26,12 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+# 自前のネットワークは作らず health-ojimpo のネットワークに相乗りする。
+# arigato-nas は Docker の既定アドレスプールを使い切っていて、新しいネットワークを
+# 作れない（"all predefined address pools have been fully subnetted"）。
+# health-ojimpo の backend からは http://scrobble-gateway:3000 で届く。
+networks:
+  default:
+    name: health-ojimpo_default
+    external: true
