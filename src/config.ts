@@ -26,6 +26,7 @@ const envSchema = z.object({
   HISTORY_DB_PATH: z.string().trim().min(1).default("./data/lastfm.sqlite"),
   HISTORY_LIVE_SCAN_LIMIT: z.coerce.number().int().min(200).max(50_000).default(5_000),
   HISTORY_MAX_SYNC_TRACKS: z.coerce.number().int().min(200).max(2_000_000).default(250_000),
+  HISTORY_INCREMENTAL_LOOKBACK_HOURS: z.coerce.number().int().min(0).max(24 * 30).default(72),
 });
 
 export type AppConfig = {
@@ -48,6 +49,7 @@ export type AppConfig = {
   historyDbPath: string;
   historyLiveScanLimit: number;
   historyMaxSyncTracks: number;
+  historyIncrementalLookbackSeconds: number;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -78,6 +80,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     historyDbPath: parsed.HISTORY_DB_PATH,
     historyLiveScanLimit: parsed.HISTORY_LIVE_SCAN_LIMIT,
     historyMaxSyncTracks: parsed.HISTORY_MAX_SYNC_TRACKS,
+    historyIncrementalLookbackSeconds: parsed.HISTORY_INCREMENTAL_LOOKBACK_HOURS * 60 * 60,
   };
 }
 

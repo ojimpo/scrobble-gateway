@@ -3,6 +3,8 @@ import { HistoryRepository } from "./history-repository.js";
 
 export type SyncMode = "incremental" | "full";
 
+export const DEFAULT_INCREMENTAL_LOOKBACK_SECONDS = 72 * 60 * 60;
+
 export type SyncResult = {
   mode: SyncMode;
   startedAt: string;
@@ -24,6 +26,11 @@ export class HistorySyncService {
     private readonly repository: HistoryRepository,
     private readonly username: string,
     private readonly maxAllowedTracks: number,
+    // Incremental runs re-read this many seconds before the newest stored
+    // scrobble. Spotify-originated scrobbles reach Last.fm late and out of
+    // order, so a cursor at the newest second skips plays that arrive after a
+    // newer one was already indexed. Upserts make the overlap harmless.
+    private readonly incrementalLookbackSeconds: number = DEFAULT_INCREMENTAL_LOOKBACK_SECONDS,
   ) {}
 
   sync(mode: SyncMode, requestedMaxTracks: number): Promise<SyncResult> {
@@ -62,9 +69,12 @@ export class HistorySyncService {
     // Incremental runs re-read the newest second inclusively. Full runs keep a
     // persistent oldest cursor so a capped backfill resumes instead of
     // repeatedly downloading the same newest slice.
-    const from = mode === "incremental" && newestUnix !== undefined ? newestUnix : undefined;
+    const cursorFrom = mode === "incremental" && newestUnix !== undefined ? newestUnix : undefined;
     const upperBoundary = mode === "full" ? (fullProgress?.upperUnix ?? startedAtUnix) : startedAtUnix;
     const to = mode === "full" ? (fullProgress?.cursorUnix ?? upperBoundary) : upperBoundary;
+    let from = cursorFrom === undefined || this.incrementalLookbackSeconds <= 0
+      ? cursorFrom
+      : Math.max(cursorFrom - this.incrementalLookbackSeconds, 0);
 
     let scannedTracks = 0;
     let storedRowsChanged = 0;
@@ -73,13 +83,20 @@ export class HistorySyncService {
     let completedRequestedRange = false;
     let oldestSelectedUnix: number | null = null;
 
-    const first = await this.api.getRecentTracksPage({
+    let first = await this.api.getRecentTracksPage({
       ...(from === undefined ? {} : { from }),
       to,
       page: 1,
       limit: 200,
     });
     pagesFetched += 1;
+    // A capped backlog must advance from the cursor itself. With the lookback
+    // window it would re-read the same already-indexed oldest slice forever.
+    if (from !== cursorFrom && first.pageInfo.total > maxTracks) {
+      from = cursorFrom;
+      first = await this.api.getRecentTracksPage({ ...(from === undefined ? {} : { from }), to, page: 1, limit: 200 });
+      pagesFetched += 1;
+    }
     totalReportedByLastFm = first.pageInfo.total;
 
     // A capped incremental run must advance from the oldest edge of the

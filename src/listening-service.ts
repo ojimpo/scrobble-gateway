@@ -20,8 +20,9 @@ export class ListeningService {
     private readonly liveScanLimit: number,
     maxSyncTracks: number,
     private readonly mutationsEnabled = true,
+    incrementalLookbackSeconds?: number,
   ) {
-    this.syncService = new HistorySyncService(api, history, username, maxSyncTracks);
+    this.syncService = new HistorySyncService(api, history, username, maxSyncTracks, incrementalLookbackSeconds);
   }
 
   getUserProfile() {

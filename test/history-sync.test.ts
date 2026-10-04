@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LastFmApi, RecentTrack } from "../src/domain.js";
 import { HistoryRepository } from "../src/history-repository.js";
-import { HistorySyncService } from "../src/history-sync.js";
+import { DEFAULT_INCREMENTAL_LOOKBACK_SECONDS, HistorySyncService } from "../src/history-sync.js";
 
 const repositories: HistoryRepository[] = [];
 afterEach(() => {
@@ -70,6 +70,37 @@ describe("HistorySyncService", () => {
     expect(results[3]?.completedRequestedRange).toBe(true);
     expect(results[2]?.status.coveredThroughAt).toBe(new Date(100 * 1000).toISOString());
     expect(results[3]?.status.coveredThroughAt).not.toBe(new Date(100 * 1000).toISOString());
+  });
+
+  it("picks up a late scrobble older than the newest indexed one", async () => {
+    // Spotify scrobbles reach Last.fm late and out of order. A cursor at the
+    // newest second skipped them for good (12 plays in 2026-09).
+    const base = 1_790_000_000;
+    const repository = createRepository();
+    repository.upsertTracks("listener", [track("Earlier", base), track("Newest", base + 600)]);
+    repository.markSync("listener", "full", true, base + 600, base + 600);
+    const api = recentApi([track("Newest", base + 600), track("Late", base + 300), track("Earlier", base)]);
+    const sync = new HistorySyncService(api, repository, "listener", 1_000);
+
+    await sync.sync("incremental", 1_000);
+
+    expect(repository.getStatus("listener")).toMatchObject({ indexedScrobbles: 3 });
+    expect(vi.mocked(api.getRecentTracksPage).mock.calls[0]?.[0]).toMatchObject({
+      from: base + 600 - DEFAULT_INCREMENTAL_LOOKBACK_SECONDS,
+    });
+  });
+
+  it("does not re-read the window when the lookback is disabled", async () => {
+    const base = 1_790_000_000;
+    const repository = createRepository();
+    repository.upsertTracks("listener", [track("Newest", base + 600)]);
+    repository.markSync("listener", "full", true, base + 600, base + 600);
+    const api = recentApi([track("Newest", base + 600), track("Late", base + 300)]);
+    const sync = new HistorySyncService(api, repository, "listener", 1_000, 0);
+
+    await sync.sync("incremental", 1_000);
+
+    expect(repository.getStatus("listener")).toMatchObject({ indexedScrobbles: 1 });
   });
 });
 

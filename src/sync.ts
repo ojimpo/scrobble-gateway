@@ -25,7 +25,13 @@ const lastfm = new LastFmClient({
 });
 
 try {
-  const sync = new HistorySyncService(lastfm, history, config.lastfmUsername, config.historyMaxSyncTracks);
+  const sync = new HistorySyncService(
+    lastfm,
+    history,
+    config.lastfmUsername,
+    config.historyMaxSyncTracks,
+    config.historyIncrementalLookbackSeconds,
+  );
   const result = await sync.sync(requestedMode as SyncMode, requestedMax);
   console.log(JSON.stringify(result, null, 2));
 } finally {

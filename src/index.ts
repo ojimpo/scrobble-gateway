@@ -31,6 +31,7 @@ const service = new ListeningService(
   config.historyLiveScanLimit,
   config.historyMaxSyncTracks,
   config.mutationsEnabled,
+  config.historyIncrementalLookbackSeconds,
 );
 const musicbrainz = new MusicBrainzClient({
   userAgent: config.musicbrainzUserAgent,
