@@ -22,6 +22,7 @@ Last.fm データの唯一の窓口になる独立サービス。Last.fm API キ
 
 - 既存 MCP 6候補を比較して採用（比較表は Cosense）。1人分の scrobble を自前 SQLite に持って MCP は DB を読む、という構成がこのプロジェクトとほぼ同じだったため
 - `upstream` リモートに上流がある。上流の修正は `git fetch upstream && git merge upstream/main` で取り込む。**上流に無い変更は、上流と衝突しにくいよう小さく保つ**
+- **上流への PR（2026-10-05）**: [#1 MBID インデックス](https://github.com/sptmru/lastfm-mcp/pull/1)、[#2 差分同期の遡り](https://github.com/sptmru/lastfm-mcp/pull/2)。fork は `ojimpo/lastfm-mcp`（PR 用。scrobble-gateway 本体とは別物）。取り込まれたら、次に upstream を merge するときにこちらの同じ変更と衝突しうるので、上流側を採る
 - 上流から変えた点（2026-10-04）
   - 差分同期を直近 72 時間遡る（`HISTORY_INCREMENTAL_LOOKBACK_HOURS`）。上流は最新 scrobble の秒から取るので後着分を落とす
   - 起動時と毎時の自動同期（`src/history-sync-scheduler.ts`）。上流はツールか CLI で手動同期する作り
@@ -111,6 +112,14 @@ sudo systemctl restart cloudflared
 - **名寄せは日本語表記と英語表記をまとめない**（エイプリルブルー / AprilBlue、宇多田ヒカル / Hikaru Utada）。MBID が無いと別アーティストとして数えられる。**LLM がおおむね吸収できるので当面やらない**（2026-10-05 本人判断）。読み違いが出たら別名の対応表を足す
 - Spotify Liked との重なりは、Spotify 連携（未設定）を有効にすれば `compare_spotify_lastfm_library` がある
 - Last.fm 側の Loved は使っていない（Like は Spotify が正本）
+
+## Like → Love 同期（直近の再生のみ）
+
+- `src/recent-like-love-sync.ts`。毎時の履歴同期の直後（スケジューラの afterSync）に走る。直近 `LIKE_LOVE_WINDOW_HOURS`（既定72）に再生した未 Love の曲を Spotify の Like 一覧と突き合わせ、exact / normalized_exact 一致だけ `track.love`
+- `LIKE_LOVE_SYNC=off|dry-run|on`。dry-run の候補は `like_love_log`（status=would_love）とログの `like_love_would_love` に出る。結果は `/healthz` の `likeLove`
+- **上流の `SPOTIFY_AUTO_SYNC_ENABLED` は false にしておく**（Spotify の認証情報を入れると既定 true になり、Like 全件を Love する）。両方有効だと起動を拒否する
+- Spotify アプリは health-ojimpo と同じものを使い、**トークンは別に取る**（リフレッシュトークンのローテーションで共用すると片方が死ぬ）。リダイレクト URI は `http://127.0.0.1:8888/callback`
+- 認証（対話式、本人がターミナルで）: `docker compose exec scrobble-gateway node dist/src/auth.js spotify` / `... lastfm`。トークンは `./data/spotify-tokens.json`・`./data/lastfm-session.json`。Last.fm の書き込みには `.env` の `LASTFM_API_SECRET` が要る
 
 ## 後回しにしたもの
 
