@@ -4,6 +4,7 @@ import { createMcpHandler } from "@modelcontextprotocol/server";
 import type { Request, Response } from "express";
 import { loadConfig } from "./config.js";
 import { HistoryRepository } from "./history-repository.js";
+import { HistorySyncScheduler } from "./history-sync-scheduler.js";
 import { IntelligenceRepository } from "./intelligence-repository.js";
 import { IntelligenceService } from "./intelligence-service.js";
 import { LastFmClient } from "./lastfm-client.js";
@@ -49,6 +50,16 @@ const intelligence = new IntelligenceService(
   config.mutationsEnabled,
 );
 
+const historyScheduler = config.historyAutoSyncEnabled
+  ? new HistorySyncScheduler(
+    service.syncService,
+    history,
+    config.lastfmUsername,
+    config.historyMaxSyncTracks,
+    config.historyAutoSyncIntervalMs,
+  )
+  : undefined;
+
 const music = createMusicRuntime(config);
 const handler = createMcpHandler(() => createLastFmMcpServer(service, intelligence, music));
 const nodeHandler = toNodeHandler(handler);
@@ -65,6 +76,7 @@ app.get("/healthz", (_request: Request, response: Response) => {
     username: config.lastfmUsername,
     mutationsEnabled: config.mutationsEnabled,
     history: service.getHistoryStatus(),
+    historyAutoSync: historyScheduler?.getStatus() ?? { enabled: false },
   });
 });
 
@@ -75,6 +87,7 @@ app.all("/mcp", (request: Request, response: Response) => {
 const httpServer = app.listen(config.port, config.host, () => {
   console.log(`Last.fm MCP listening on http://${config.host}:${config.port}/mcp for ${config.lastfmUsername}`);
 });
+historyScheduler?.start();
 music.scheduler?.start();
 
 let shuttingDown = false;
@@ -84,6 +97,7 @@ async function shutdown(signal: string): Promise<void> {
   console.log(`Received ${signal}; shutting down`);
   httpServer.close();
   await handler.close();
+  await historyScheduler?.stop();
   await music.scheduler?.stop();
   intelligenceRepository.close();
   history.close();

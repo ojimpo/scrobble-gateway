@@ -27,6 +27,8 @@ const envSchema = z.object({
   HISTORY_LIVE_SCAN_LIMIT: z.coerce.number().int().min(200).max(50_000).default(5_000),
   HISTORY_MAX_SYNC_TRACKS: z.coerce.number().int().min(200).max(2_000_000).default(250_000),
   HISTORY_INCREMENTAL_LOOKBACK_HOURS: z.coerce.number().int().min(0).max(24 * 30).default(72),
+  HISTORY_AUTO_SYNC_ENABLED: z.string().trim().toLowerCase().pipe(z.enum(["true", "false"])).transform((value) => value === "true").default(true),
+  HISTORY_AUTO_SYNC_INTERVAL_SECONDS: z.coerce.number().int().min(300).max(86_400).default(3_600),
 });
 
 export type AppConfig = {
@@ -50,6 +52,8 @@ export type AppConfig = {
   historyLiveScanLimit: number;
   historyMaxSyncTracks: number;
   historyIncrementalLookbackSeconds: number;
+  historyAutoSyncEnabled: boolean;
+  historyAutoSyncIntervalMs: number;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -81,6 +85,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     historyLiveScanLimit: parsed.HISTORY_LIVE_SCAN_LIMIT,
     historyMaxSyncTracks: parsed.HISTORY_MAX_SYNC_TRACKS,
     historyIncrementalLookbackSeconds: parsed.HISTORY_INCREMENTAL_LOOKBACK_HOURS * 60 * 60,
+    historyAutoSyncEnabled: parsed.HISTORY_AUTO_SYNC_ENABLED,
+    historyAutoSyncIntervalMs: parsed.HISTORY_AUTO_SYNC_INTERVAL_SECONDS * 1_000,
   };
 }
 
