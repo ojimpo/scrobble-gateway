@@ -1,10 +1,11 @@
-import { createMcpExpressApp } from "@modelcontextprotocol/express";
 import { toNodeHandler } from "@modelcontextprotocol/node";
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import type { Request, Response } from "express";
+import { resolveOAuthConfig } from "./auth/config.js";
 import { loadConfig } from "./config.js";
 import { HistoryRepository } from "./history-repository.js";
 import { HistorySyncScheduler } from "./history-sync-scheduler.js";
+import { createHttpApp } from "./http-app.js";
 import { IntelligenceRepository } from "./intelligence-repository.js";
 import { IntelligenceService } from "./intelligence-service.js";
 import { LastFmClient } from "./lastfm-client.js";
@@ -69,13 +70,15 @@ const handler = createMcpHandler(() => createLastFmMcpServer(service, intelligen
   username: config.lastfmUsername,
 }));
 const nodeHandler = toNodeHandler(handler);
-const app = createMcpExpressApp({
+const oauthConfig = resolveOAuthConfig();
+const trustProxy = process.env.MCP_TRUST_PROXY?.trim();
+const { app, oauth } = createHttpApp({
   host: config.host,
   allowedHosts: config.allowedHosts,
-});
-
-app.get("/healthz", (_request: Request, response: Response) => {
-  response.json({
+  mcpHandler: (request: Request, response: Response) => {
+    void nodeHandler(request, response, request.body);
+  },
+  healthz: () => ({
     status: "ok",
     service: "lastfm-mcp",
     version: "0.3.0",
@@ -83,11 +86,11 @@ app.get("/healthz", (_request: Request, response: Response) => {
     mutationsEnabled: config.mutationsEnabled,
     history: service.getHistoryStatus(),
     historyAutoSync: historyScheduler?.getStatus() ?? { enabled: false },
-  });
-});
-
-app.all("/mcp", (request: Request, response: Response) => {
-  void nodeHandler(request, response, request.body);
+    oauth: oauthConfig !== undefined,
+  }),
+  ...(oauthConfig ? { oauth: oauthConfig } : {}),
+  allowUnauthenticated: process.env.MCP_ALLOW_UNAUTHENTICATED === "true",
+  ...(trustProxy ? { trustProxy: /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy } : {}),
 });
 
 const httpServer = app.listen(config.port, config.host, () => {
@@ -103,6 +106,7 @@ async function shutdown(signal: string): Promise<void> {
   console.log(`Received ${signal}; shutting down`);
   httpServer.close();
   await handler.close();
+  oauth?.store.flush();
   await historyScheduler?.stop();
   await music.scheduler?.stop();
   rangeAnalytics.close();
