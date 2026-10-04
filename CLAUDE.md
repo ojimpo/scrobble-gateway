@@ -14,7 +14,7 @@ Last.fm データの唯一の窓口になる独立サービス。Last.fm API キ
 ## 状態
 
 **2026-10-05: arigato-nas の 4104 番で稼働中。`/mcp` は OAuth 必須。** 全履歴 95,105件を Last.fm から取得済みで、health.db と1件残らず一致。毎時の差分同期が動いている。
-公開ホスト名は `scrobble-gateway.ojimpo.com`（DNS の CNAME は作成済み。Tunnel の ingress 追記は sudo が要るので本人作業）。
+**2026-10-05 から `https://scrobble-gateway.ojimpo.com/mcp` で公開中**（Cloudflare Tunnel。OAuth の一連の流れを公開 URL 越しに確認済み）。
 health-ojimpo はまだ旧取り込みのまま（内部 REST 未実装）。GitHub は `ojimpo/scrobble-gateway`（public）。README は だ・である調の日本語（本人指定）。上流の英語 README は `docs/upstream-README.md` に残してある（ツール一覧の参照用）。
 仕様・判断履歴の正本は Cosense `Last.fm MCP・音楽レコメンド基盤 NAS調査引継ぎ`。経過は DEVLOG.md。
 
@@ -54,6 +54,7 @@ sudo systemctl restart cloudflared
 ```
 
 - DNS（CNAME）は `cloudflared tunnel route dns <tunnel-id> scrobble-gateway.ojimpo.com` で作成済み（`~/.cloudflared/cert.pem` があるので sudo 不要）
+- **Python の `urllib` で公開 URL を叩くと Cloudflare に 403 で弾かれる**（既定の User-Agent がボット扱い）。アプリには届いていないのでログにも出ない。検証スクリプトでは `User-Agent` を付ける。curl は通る
 - **`cloudflared tunnel ingress rule` は `--config` を `tunnel` の直後に置く。** `ingress rule ... --config` の順だと設定が読まれず、既定のルールで照合されて 404 に見える
 
 ## コマンド
