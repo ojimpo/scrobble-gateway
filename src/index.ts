@@ -57,6 +57,7 @@ const historyScheduler = config.historyAutoSyncEnabled
     config.lastfmUsername,
     config.historyMaxSyncTracks,
     config.historyAutoSyncIntervalMs,
+    () => intelligenceRepository.ensureCanonicalIndex(config.lastfmUsername),
   )
   : undefined;
 

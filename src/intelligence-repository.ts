@@ -789,6 +789,12 @@ export class IntelligenceRepository {
       );
       CREATE INDEX IF NOT EXISTS idx_canonical_alias_lookup
         ON canonical_aliases (username, entity_type, alias_key);
+      -- ensureCanonicalIndex looks every scrobble up by MBID. Without these the
+      -- lookups scan the whole table, which made the first index of a 95k
+      -- history take tens of minutes and blocked the event loop meanwhile.
+      CREATE INDEX IF NOT EXISTS idx_canonical_artists_mbid ON canonical_artists (username, mbid);
+      CREATE INDEX IF NOT EXISTS idx_canonical_albums_mbid ON canonical_albums (username, mbid);
+      CREATE INDEX IF NOT EXISTS idx_canonical_tracks_mbid ON canonical_tracks (username, mbid);
       CREATE TABLE IF NOT EXISTS canonical_alias_variants (
         username TEXT NOT NULL, entity_type TEXT NOT NULL, artist_key TEXT NOT NULL,
         canonical_key TEXT NOT NULL, alias TEXT NOT NULL,

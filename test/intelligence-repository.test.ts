@@ -12,6 +12,21 @@ afterEach(() => {
 });
 
 describe("IntelligenceRepository", () => {
+  it("indexes canonical tables by MBID so the canonical backfill does not scan them per scrobble", () => {
+    const directory = mkdtempSync(join(tmpdir(), "lastfm-intelligence-"));
+    directories.push(directory);
+    const path = join(directory, "history.sqlite");
+    new HistoryRepository(path).close();
+    const repository = new IntelligenceRepository(path);
+    const plans = ["canonical_artists", "canonical_albums", "canonical_tracks"].map((table) =>
+      JSON.stringify((repository as unknown as { db: { prepare(sql: string): { all(...args: unknown[]): unknown[] } } }).db
+        .prepare(`EXPLAIN QUERY PLAN SELECT canonical_key FROM ${table} WHERE username = ? AND mbid = ? LIMIT 1`)
+        .all("listener", "mbid")));
+    repository.close();
+    // The primary key also starts with username, so "USING INDEX" alone would pass without them.
+    for (const plan of plans) expect(plan).toMatch(/idx_canonical_(artists|albums|tracks)_mbid/);
+  });
+
   it("backfills canonical aliases and aggregates exposure across spelling and edition variants", () => {
     const directory = mkdtempSync(join(tmpdir(), "lastfm-intelligence-"));
     directories.push(directory);

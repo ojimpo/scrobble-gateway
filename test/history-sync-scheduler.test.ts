@@ -42,6 +42,26 @@ describe("HistorySyncScheduler", () => {
     }
   });
 
+  it("runs the after-sync hook only when the sync succeeds", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const repository = createRepository();
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const sync = vi.fn().mockResolvedValueOnce(result()).mockRejectedValueOnce(new Error("down"));
+    const afterSync = vi.fn();
+    const scheduler = new HistorySyncScheduler({ sync } as unknown as HistorySyncService, repository, "listener", 1_000, 60_000, afterSync);
+    try {
+      scheduler.start();
+      await vi.waitFor(() => expect(log).toHaveBeenCalledTimes(1));
+      expect(afterSync).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.waitFor(() => expect(log).toHaveBeenCalledTimes(2));
+      expect(afterSync).toHaveBeenCalledTimes(1);
+    } finally {
+      await scheduler.stop();
+      log.mockRestore();
+    }
+  });
+
   it("records a failure and keeps the schedule", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     const repository = createRepository();
