@@ -4,6 +4,21 @@
 
 ## 2026-10-04
 
+- **22:08 Last.fm 全履歴と health.db の照合（読み取りのみ）** — lab-7b からの引き継ぎ「登録日・総 scrobble 数と health.db を照合し、2021-01-24 以前のバックフィル要否を判断材料として出す」
+  - [確] user.getInfo: playcount 95,129（照合中に 95,130 へ増加）、登録 2021-01-24 23:03:22 UTC。health.db は 95,097件、最古 2021-01-24 11:34:33 UTC
+  - **2021-01-24 より前のバックフィルは不要。** [確] Last.fm 側も 2021 年より前は 0 件
+  - 登録時刻より約11時間前の scrobble が**ちょうど50件**ある。[確] Last.fm 側も登録前は 50 件で一致。50 は Spotify recently-played の上限なので、Spotify 連携時の遡り取り込みと読める（推測）
+  - **件数差 32 は「毎時 ingest の未反映」ではなかった。** [確] Last.fm の全 scrobble がローカル最新時刻以前に収まっている
+  - 月単位 → 日単位の窓（`from`/`to` 付き `total`）で突き合わせた。[確] 2026-02 以前は全月一致。差があるのは次の3種類だけ
+    1. **ローカルに無い 13件**（2026-03-09 1件、2026-09-18 以降 12件。照合中に1件増えた）。[確] 抜けた曲はすべて `spotify_play_history` にあり、Spotify 経由の scrobble。**Last.fm に遅れて・順不同で届いた scrobble を、`from=last_timestamp` の差分取得が飛び越えている**のが原因と読める。9/17 の last_timestamp 修正までは毎回 3/9 以降を取り直していたので表面化しなかった（3/9 の1件は当時の固定起点 14:42 UTC より前で、同じ仕組み）
+    2. **ローカルにだけある 5件**。Rosa Walton「I REALLY WANT TO STAY AT YOUR HOUSE」。Last.fm 側で曲名の大小文字が直され、`UNIQUE(artist, track, scrobbled_at)` が大小文字を区別するため旧表記と新表記の2行になっている
+    3. **Last.fm の総数そのものが窓の合計より約25件多い。** [確] 全ページ取得すると 2025-09-28 と 2025-03-25 付近のブロックが重複して返る（計26行）。同じ時間帯を狭い窓で取ると重複は無く、件数もローカルと一致する。Last.fm 側のページングの重複であってデータの欠落ではない
+  - **新基盤の取り込みに効く教訓**
+    - 差分取得は `from=last_timestamp` ちょうどにしない。直近数日を毎回取り直して `INSERT OR IGNORE` する（Like→Love 同期と同じ「直近数日の見直し」）
+    - 全件取得は `user.getRecentTracks` のページングで重複が出る。件数の検証はページ総数ではなく `from`/`to` 窓の `total` で行う
+    - 重複排除キーは大小文字の表記揺れを考慮する（タイムスタンプ＋正規化した名前か、Last.fm の表記を後勝ちで更新）
+  - health-ojimpo 側の取りこぼしは health-ojimpo-ef と衝突するので触っていない。直すかどうかは本人判断（移行で取り込みが新基盤へ移るなら、旧側は直さず移行時に全件取得で埋める手もある）
+
 - **21:40 プロジェクト発足・名前決定** — 「arigato-gateway があるから scrobble-gateway とかは？」
   - 候補は lastfm-service / scrobble-hub / listening-core / lastfm-station。station はラジオ局の意味が強くデータ基盤とずれる、で見送り
   - **名前は `scrobble-gateway` で確定**（2026-10-04 本人）
