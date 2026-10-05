@@ -4,6 +4,16 @@
 
 ## 2026-10-05
 
+- **10:04 README を natural-japanese で推敲した版に差し替えた** — 「日本語キモすぎなのでFableで直してほしい」「yomiyasuが最近話題になってる気がする　上位二つを入れて試してみようか」「yomiyasu外してnatural-japaneseでREADME差し替えよう」
+  - Fable は usage credits が無く 429 で呼べなかった。代わりに日本語推敲用の Agent Skill を探し、natural-japanese（1,864★）と yomiyasu（1,385★）を `~/.claude/skills/` に入れた。入れる前に同梱スクリプトを読み、ネットワーク接続・外部コマンド実行が無いことを確認した
+  - **同時には使わず、サブエージェントを2つ立てて片方ずつ推敲させた。** yomiyasu の SKILL.md に「似た skill を同時に有効にすると干渉する」とあるため。条件は共通（文末は「である」、英数字前後のスペースは詰める、事実・数字・リンク・表・コードは変えない）
+  - [確] 2つの版とも、リンク・インラインコード・数字・見出し・表の行数が元と一致（機械的に照合）
+  - 比較用に claude.ai の Artifact を作った（3列表示＋行ごとの★＋範囲選択コメント、2列差分）。★とコメントは Artifact の db に保存し、Claude Code から ArtifactData で読んで返信も書き込む
+  - [確] 本人の★は5件すべて natural-japanese。yomiyasu は元の言い回しに引きずられやすかった（「一手に引き受ける」→「まとめて預かる」）
+  - 本人コメントを受けて「考えたが、やめた。」だけ「案を考えたが、採らなかった。」に直した。natural-japanese の lint は0件（`26aa730`）
+  - yomiyasu は `~/.claude/skills-disabled/` に退避。比較の3つの版・HTML・スクリーンショットは `docs/readme-review/`（`004b35d`）。Cosense に「日本語推敲スキル natural-japanese と yomiyasu をREADMEで比べた」を書いた（公開するかは未定）
+  - 罠: Artifact のコメント用ポップアップが画面下にはみ出して保存できなかった（高さを測って上下を切り替えるよう修正）。スクリーンショットは本物のページがログイン必須なので、同じ HTML を手元で開き db だけ本物のデータを返す偽物に差し替えて撮った
+
 - **08:10 Like→Love 同期を on にした** — 「問題ないのでonにしよう」
   - 本人作業: Spotify ダッシュボードにリダイレクト URI を追加（アプリ名 `arigato-nas-spotify-liked-delta-export` は変えようとしたが変えられなかった）、Spotify と Last.fm の認証 CLI
   - [確] Spotify の認証後、API で Like 済み 5,199 曲が見えることを確認。認証 CLI は完了時に目立つ表示が無く、本人には「貼ったけど？」と見えた。トークンファイルの有無と実際の API 呼び出しで確認した
