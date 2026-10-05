@@ -32,6 +32,8 @@ td.cell.has-cm{box-shadow:inset 3px 0 0 #d4a72c}
 td.cell.flash{animation:flash 1.4s ease-out}
 @keyframes flash{from{background:var(--mark)}}
 @media (prefers-reduced-motion:reduce){td.cell.flash{animation:none;outline:2px solid #d4a72c}}
+body.readonly .pick{display:none}
+body.readonly td.cell.pickable{padding-right:10px}
 table.diff[data-lock] td.cell{user-select:none}
 table.diff[data-lock="l"] td.cell[data-side="l"],table.diff[data-lock="m"] td.cell[data-side="m"],table.diff[data-lock="r"] td.cell[data-side="r"]{user-select:text}
 tr.same td.cell{color:var(--muted)}
@@ -83,7 +85,7 @@ aside h2{font-size:1rem;margin:0}
 <div class="diffwrap"><table class="diff" id="diff"><colgroup id="cg"></colgroup><thead><tr id="hd"></tr></thead><tbody id="rows"></tbody></table></div>
 <aside>
 <h2>コメント <span id="count" class="hint"></span></h2>
-<p class="hint">左右どちらかの列で文を範囲選択してコメントを付ける。カードを押すとその行へ移動する。</p>
+<p class="hint">列の中で文を範囲選択してコメントを付ける。カードを押すとその行へ移動する。</p>
 <p class="notice" id="dbNotice" hidden></p>
 <div id="list"></div>
 </aside>
@@ -104,7 +106,9 @@ const NAMES={"original":"元の版","natural-japanese":"natural-japanese 版","y
 const LINES={};for(const k in DOCS)LINES[k]=DOCS[k].replace(/\n$/,"").split("\n");
 const $=id=>document.getElementById(id);
 const ORDER=["original","natural-japanese","yomiyasu"];
-let pair=["three"],comments=[],picks={},db=null,pending=null,selRect=null;
+// Shown when the database is unavailable (signed-out or public-link viewers): a read-only copy of the comments and picks.
+const SNAPSHOT={"comments": [{"id": "49pdizyhwi67wrjk7uzi", "body": "自然とかは別として、一文の長さが一番適切", "createdAt": "2026-10-05T00:47:35.098Z", "line": 14, "lineEnd": 14, "pair": "three", "quote": "2021年から、SpotifyとApple Musicで再生した曲をLast.fmにscrobbleしてきた。2026年10月時点で9.5万件ある。", "reply": "", "status": "open", "version": "natural-japanese"}, {"id": "6uvid7k3ug5j12jw0yig", "body": "これは元の文が意図ある書き方と判定して残ったのかもしれないけど、自分で書くならもっとフォーマルに書くかも", "createdAt": "2026-10-05T00:49:11.929Z", "line": 19, "lineEnd": 19, "pair": "three", "quote": "が、やめた。", "reply": "", "status": "open", "version": "original"}, {"id": "9e1b5p3fig4vsnj03nym", "body": "元の表現に引きずられてるような", "createdAt": "2026-10-05T00:45:36.176Z", "line": 3, "lineEnd": 3, "pair": "three", "quote": "まとめて預かる", "reply": "読めました。元の「一手に引き受ける」を言い換えただけで、「預かる」という比喩が残っていますね。natural-japanese 版の「一か所に集めて扱う」と比べると、何をするサービスなのかが伝わりにくいと思います。", "status": "open", "version": "yomiyasu"}, {"id": "gy32k4xj41mjtcl87422", "body": "細やかだけどだいぶ的確な修正", "createdAt": "2026-10-05T00:53:56.290Z", "line": 37, "lineEnd": 37, "pair": "three", "quote": "| 起動時と毎時の自動同期 | 上流はツールかCLIから手動で同期する作りなので、放っておくと索引が古くなる |", "reply": "", "status": "open", "version": "natural-japanese"}, {"id": "icr9rl8z48lcdnm2kc6f", "body": "これが一番自然\n情報量が多い文章になると差が出る気がするね", "createdAt": "2026-10-05T00:53:18.562Z", "line": 25, "lineEnd": 25, "pair": "three", "quote": "- **Last.fmのデータの窓口はここだけにする。** APIキーもマスターDBも、ここに1つずつ置く。移行が済めば、health-ojimpoが持つのは日次の再生時間のような派生値だけになり、完全な履歴を重複して抱えることはない", "reply": "", "status": "open", "version": "natural-japanese"}, {"id": "iriomrpiqfe3eji36548", "body": "これが一番自然だと思う", "createdAt": "2026-10-05T00:45:52.138Z", "line": 3, "lineEnd": 3, "pair": "three", "quote": "一か所に集めて扱う", "reply": "読めました。L3 は natural-japanese 版で確定ということで、★ でも選んでおくと集計に入ります。", "status": "open", "version": "natural-japanese"}, {"id": "xetxsk732tu71fsg0sy8", "body": "これも句読点の使い方という点で自然かな", "createdAt": "2026-10-05T00:48:12.253Z", "line": 16, "lineEnd": 16, "pair": "three", "quote": "毎朝の音楽レコメンドもAIに作らせていて、その材料としても長期・期間別の嗜好が要る。", "reply": "", "status": "open", "version": "natural-japanese"}], "picks": [{"id": "L14", "choice": "natural-japanese", "line": 14, "texts": {"natural-japanese": "2021年から、SpotifyとApple Musicで再生した曲をLast.fmにscrobbleしてきた。2026年10月時点で9.5万件ある。", "original": "2021 年から Spotify と Apple Music の再生を Last.fm に scrobble していて、2026 年 10 月時点で 9.5 万件ある。", "yomiyasu": "2021年からSpotifyとApple Musicの再生をLast.fmにscrobbleしていて、2026年10月時点で9.5万件ある。"}, "updatedAt": "2026-10-05T00:46:56.574Z"}, {"id": "L16", "choice": "natural-japanese", "line": 16, "texts": {"natural-japanese": "毎朝の音楽レコメンドもAIに作らせていて、その材料としても長期・期間別の嗜好が要る。", "original": "毎朝の音楽レコメンドを AI に作らせているので、その材料としても長期・期間別の嗜好が要る。", "yomiyasu": "毎朝の音楽レコメンドもAIに作らせているので、その材料として長期・期間別の嗜好も要る。"}, "updatedAt": "2026-10-05T00:47:44.354Z"}, {"id": "L25", "choice": "natural-japanese", "line": 25, "texts": {"natural-japanese": "- **Last.fmのデータの窓口はここだけにする。** APIキーもマスターDBも、ここに1つずつ置く。移行が済めば、health-ojimpoが持つのは日次の再生時間のような派生値だけになり、完全な履歴を重複して抱えることはない", "original": "- **Last.fm のデータの窓口はここだけにする。** API キーもマスター DB もここに 1 つずつ置く。移行が済めば health-ojimpo は日次の再生時間のような派生値だけを持ち、完全な履歴を重複して抱えない", "yomiyasu": "- **Last.fmのデータの窓口はここだけにする。** APIキーもマスターDBもここに1つずつ置く。移行が済めば、health-ojimpoは日次の再生時間のような派生値だけを持ち、完全な履歴を重複して抱えない"}, "updatedAt": "2026-10-05T00:49:35.206Z"}, {"id": "L3", "choice": "natural-japanese", "line": 3, "texts": {"natural-japanese": "自分のLast.fmの聴取履歴を一か所に集めて扱う、自宅サーバー上のサービスである。", "original": "自分の Last.fm の聴取履歴を、自宅サーバーで一手に引き受けるサービスだ。", "yomiyasu": "Last.fmにある自分の聴取履歴を、自宅サーバーでまとめて預かるサービスである。"}, "updatedAt": "2026-10-05T00:46:36.176Z"}, {"id": "L37", "choice": "natural-japanese", "line": 37, "texts": {"natural-japanese": "| 起動時と毎時の自動同期 | 上流はツールかCLIから手動で同期する作りなので、放っておくと索引が古くなる |", "original": "| 起動時と毎時の自動同期 | 上流はツールか CLI で手動で同期する作りで、放っておくと索引が古くなる |", "yomiyasu": "| 起動時と毎時の自動同期 | 上流はツールかCLIで手動で同期する作りで、放っておくと索引が古くなる |"}, "updatedAt": "2026-10-05T00:53:35.114Z"}], "takenAt": "2026-10-05"};
+let pair=["three"],comments=[],picks={},db=null,canWrite=false,pending=null,selRect=null;
 function esc(s){return s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}
 function cell(side,ver,ln,html,cls){return `<td class="ln">${ln??""}</td><td class="cell ${cls||""}" data-side="${side}" ${ln?`data-version="${ver}" data-line="${ln}"`:""}>${html}</td>`}
 function charHtml(base,txt){let o="";for(const p of Diff.diffChars(base,txt)){if(p.added)o+=`<ins>${esc(p.value)}</ins>`;else if(!p.removed)o+=esc(p.value)}return o}
@@ -140,7 +144,7 @@ document.querySelectorAll(".bar button").forEach(x=>x.addEventListener("click",(
 // keep a selection inside one column
 $("diff").addEventListener("mousedown",e=>{if(e.target.closest(".pick"))return;const c=e.target.closest("td.cell");const t=$("diff");if(c)t.dataset.lock=c.dataset.side;else delete t.dataset.lock;hideAdd()});
 $("rows").addEventListener("click",async e=>{const b=e.target.closest(".pick");if(!b)return;e.stopPropagation();
- if(!db){alertBox("保存先に繋がっていないため選べない");return}
+ if(!canWrite){alertBox("この表示では選べない");return}
  const line=+b.dataset.line,choice=b.dataset.choice,ref=db.doc("picks/L"+line);b.disabled=true;
  try{if(picks[line]&&picks[line].choice===choice)await ref.delete();else await ref.set({line,choice,texts:Object.fromEntries(ORDER.map(v=>[v,LINES[v][line-1]??""])),updatedAt:new Date().toISOString()})}
  catch(err){alertBox("保存できなかった（"+(err&&err.code||"error")+"）")}finally{b.disabled=false}});
@@ -149,7 +153,7 @@ function markPicks(){document.querySelectorAll("td.cell.picked").forEach(c=>c.cl
  for(const k in picks){const p=picks[k];const c=document.querySelector(`tr[data-line="${p.line}"] td.cell[data-version="${p.choice}"]`);if(c)c.classList.add("picked")}
  const changed=document.querySelectorAll("tr.chg").length,cnt={};for(const v of ORDER)cnt[v]=0;let total=0;for(const k in picks){if(cnt[picks[k].choice]!==undefined){cnt[picks[k].choice]++;total++}}
  $("tally").innerHTML=`<span>違いのある行 <b>${changed}</b></span>`+ORDER.map(v=>`<span>${NAMES[v]} <b>${cnt[v]}</b></span>`).join("")+`<span>未選択 <b>${Math.max(changed-total,0)}</b></span>`}
-document.addEventListener("mouseup",e=>{if(e.target.closest("#pop,#addBtn"))return;setTimeout(()=>{
+document.addEventListener("mouseup",e=>{if(!canWrite||(e.target.closest&&e.target.closest("#pop,#addBtn")))return;setTimeout(()=>{
  const s=getSelection();if(!s||s.isCollapsed){hideAdd();return}
  const text=s.toString().trim();if(!text){hideAdd();return}
  const r=s.getRangeAt(0);const cellOf=n=>(n.nodeType===1?n:n.parentElement)?.closest("td.cell[data-line]");
@@ -170,20 +174,20 @@ addEventListener("resize",()=>{if(!$("pop").hidden)placePop()});
 $("popBody").addEventListener("keydown",e=>{if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){e.preventDefault();$("popSave").click()}else if(e.key==="Escape"){$("pop").hidden=true}});
 $("popCancel").addEventListener("click",()=>{$("pop").hidden=true});
 $("popSave").addEventListener("click",async()=>{const body=$("popBody").value.trim();if(!body){$("popErr").textContent="コメントを入力してください";return}
- if(!db){$("popErr").textContent="保存先に繋がっていないため保存できません";return}
+ if(!canWrite){$("popErr").textContent="この表示では保存できない";return}
  const btn=$("popSave");btn.disabled=true;
  try{await db.collection("comments").add({...pending,body,status:"open",reply:"",createdAt:new Date().toISOString()});$("pop").hidden=true;getSelection().removeAllRanges()}
  catch(e){$("popErr").textContent="保存できませんでした（"+(e&&e.code||"error")+"）"}finally{btn.disabled=false}});
 function renderList(){const list=$("list");$("count").textContent=comments.length?`${comments.filter(c=>c.status!=="resolved").length}件未解決 / 全${comments.length}件`:"";
  if(!comments.length){list.innerHTML='<p class="hint">まだコメントはない。</p>';return}
  list.innerHTML="";for(const c of comments){const el=document.createElement("div");el.className="cm"+(c.status==="resolved"?" resolved":"");
-  el.innerHTML=`<div class="meta"><b></b><span class="ln"></span><span class="when"></span></div><blockquote></blockquote><div class="body"></div>${c.reply?'<div class="reply"><b>Claudeの返信</b><div class="rt"></div></div>':""}<div class="acts"><button type="button" class="res"></button><button type="button" class="delb">削除</button></div>`;
+  el.innerHTML=`<div class="meta"><b></b><span class="ln"></span><span class="when"></span></div><blockquote></blockquote><div class="body"></div>${c.reply?'<div class="reply"><b>Claudeの返信</b><div class="rt"></div></div>':""}${canWrite?'<div class="acts"><button type="button" class="res"></button><button type="button" class="delb">削除</button></div>':""}`;
   el.querySelector(".meta b").textContent=NAMES[c.version]||c.version;el.querySelector(".ln").textContent=c.line===(c.lineEnd||c.line)?`L${c.line}`:`L${c.line}–${c.lineEnd}`;
   el.querySelector(".when").textContent=(c.createdAt||"").slice(5,16).replace("T"," ");el.querySelector("blockquote").textContent=c.quote;el.querySelector(".body").textContent=c.body;
   if(c.reply)el.querySelector(".rt").textContent=c.reply;
-  const res=el.querySelector(".res");res.textContent=c.status==="resolved"?"未解決に戻す":"解決";
+  const res=el.querySelector(".res");if(res){res.textContent=c.status==="resolved"?"未解決に戻す":"解決";
   res.addEventListener("click",async e=>{e.stopPropagation();res.disabled=true;try{await db.doc("comments/"+c.id).update({status:c.status==="resolved"?"open":"resolved"})}catch(_){res.disabled=false}});
-  el.querySelector(".delb").addEventListener("click",async e=>{e.stopPropagation();const b=e.currentTarget;if(b.dataset.confirm!=="1"){b.dataset.confirm="1";b.textContent="本当に削除";return}b.disabled=true;try{await db.doc("comments/"+c.id).delete()}catch(_){b.disabled=false}});
+  el.querySelector(".delb").addEventListener("click",async e=>{e.stopPropagation();const b=e.currentTarget;if(b.dataset.confirm!=="1"){b.dataset.confirm="1";b.textContent="本当に削除";return}b.disabled=true;try{await db.doc("comments/"+c.id).delete()}catch(_){b.disabled=false}})}
   el.addEventListener("click",()=>jump(c));list.appendChild(el)}}
 function jump(c){if(pair[0]!=="three"&&!pair.includes(c.version)){const want=c.pair&&c.pair.split("|").includes(c.version)?c.pair.split("|"):(c.version==="original"?["original","natural-japanese"]:["original",c.version]);pair=want;render()}
  const t=document.querySelector(`td.cell[data-version="${c.version}"][data-line="${c.line}"]`);if(!t)return;t.scrollIntoView({block:"center",behavior:"smooth"});
@@ -191,7 +195,12 @@ function jump(c){if(pair[0]!=="three"&&!pair.includes(c.version)){const want=c.p
 (async()=>{let init="three";try{init=localStorage.getItem("readme-compare-pair")||init}catch(e){}
  if(document.querySelector(`.bar button[data-pair="${init}"]`))pair=init.split("|");render();renderList();
  db=await window.claude?.use?.("db")??null;
- if(!db){const n=$("dbNotice");n.hidden=false;n.textContent="この表示ではコメントを保存できない（サインインしていない、または権限がない）。差分は見られる。";return}
+ if(!db){document.body.classList.add("readonly");const n=$("dbNotice");n.hidden=false;
+  n.textContent=`読み取り専用で表示している（${SNAPSHOT.takenAt}時点のコメントと選択の写し）。`;
+  comments=SNAPSHOT.comments;picks={};for(const p of SNAPSHOT.picks)picks[p.line]=p;renderList();markCommented();if(pair[0]==="three")markPicks();return}
+ // Only editors write; other signed-in viewers see the live data read-only.
+ const user=await window.claude.use("user");canWrite=user?(await user.isOwner().catch(()=>false)):false;
+ if(!canWrite){document.body.classList.add("readonly");alertBox("読み取り専用で表示している。")}
  db.collection("comments").orderBy("createdAt","asc").onSnapshot(s=>{comments=s.docs.map(d=>({id:d.id,...d.data()}));renderList();markCommented()},
   e=>{alertBox("コメントの読み込みが止まった（"+(e&&e.code)+"）。再読み込みで直ることがある。")});
  db.collection("picks").onSnapshot(s=>{picks={};for(const d of s.docs){const v=d.data();picks[v.line]=v}if(pair[0]==="three")markPicks()},
