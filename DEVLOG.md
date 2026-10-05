@@ -11,7 +11,7 @@
   - 比較用に claude.ai の Artifact を作った（3列表示＋行ごとの★＋範囲選択コメント、2列差分）。★とコメントは Artifact の db に保存し、Claude Code から ArtifactData で読んで返信も書き込む
   - [確] 本人の★は5件すべて natural-japanese。yomiyasu は元の言い回しに引きずられやすかった（「一手に引き受ける」→「まとめて預かる」）
   - 本人コメントを受けて「考えたが、やめた。」だけ「案を考えたが、採らなかった。」に直した。natural-japanese の lint は0件（`26aa730`）
-  - yomiyasu は `~/.claude/skills-disabled/` に退避。比較の3つの版・HTML・スクリーンショットは `docs/readme-review/`（`004b35d`）。Cosense に「日本語推敲スキル natural-japanese と yomiyasu をREADMEで比べた」を書いた（公開するかは未定）
+  - yomiyasu は `~/.claude/skills-disabled/` に退避。比較の3つの版・HTML・スクリーンショットは `docs/readme-review/`（`004b35d`）。Cosense に「日本語推敲スキル natural-japanese と yomiyasu を比べた」を書いた（公開するかは未定）
   - 罠: Artifact のコメント用ポップアップが画面下にはみ出して保存できなかった（高さを測って上下を切り替えるよう修正）。スクリーンショットは本物のページがログイン必須なので、同じ HTML を手元で開き db だけ本物のデータを返す偽物に差し替えて撮った
 
 - **08:10 Like→Love 同期を on にした** — 「問題ないのでonにしよう」
