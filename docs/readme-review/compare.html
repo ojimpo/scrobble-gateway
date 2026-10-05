@@ -1,0 +1,199 @@
+<title>READMEの推敲比べ</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;700&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+:root{--bg:#f5f6f5;--surface:#fff;--ink:#1d2321;--muted:#5f6965;--line:#dce2df;--accent:#1f6f62;--accent-ink:#fff;--del:#fbe3e1;--del-strong:#f2b8b3;--ins:#dff2e6;--ins-strong:#a9dcba;--mark:#fff1b8;--code:#eef1f0;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#131715;--surface:#1a1f1d;--ink:#e5eae7;--muted:#9aa5a0;--line:#2d3532;--accent:#6cc2b2;--accent-ink:#0f1412;--del:#3a2422;--del-strong:#6b3530;--ins:#1d3326;--ins-strong:#2f6142;--mark:#4a4220;--code:#232a27;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#131715;--surface:#1a1f1d;--ink:#e5eae7;--muted:#9aa5a0;--line:#2d3532;--accent:#6cc2b2;--accent-ink:#0f1412;--del:#3a2422;--del-strong:#6b3530;--ins:#1d3326;--ins-strong:#2f6142;--mark:#4a4220;--code:#232a27;color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font-family:"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP",sans-serif;font-size:14px;line-height:1.75;padding-inline:16px;padding-block:20px 40px}
+.page{max-width:1700px;margin:0 auto;display:grid;gap:16px}
+header h1{font-size:1.4rem;margin:0 0 4px;text-wrap:balance}
+header p{margin:0;color:var(--muted);max-width:90ch}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);padding-block:8px;z-index:5}
+.bar .lab{color:var(--muted);font-size:.85rem;margin-right:4px}
+.bar button{font:inherit;font-size:.88rem;padding:5px 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.bar button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.legend{margin-left:auto;display:flex;gap:12px;font-size:.8rem;color:var(--muted)}
+.legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.legend .l-pk::before{background:var(--accent)}.legend .l-del::before{background:var(--del-strong)}.legend .l-ins::before{background:var(--ins-strong)}.legend .l-cm::before{background:var(--mark)}
+.main{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+@media (min-width:1200px){.main{grid-template-columns:minmax(0,1fr) 360px}}
+.diffwrap{background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow-x:auto}
+table.diff{border-collapse:collapse;width:100%;table-layout:fixed;font-size:13.5px}
+table.diff col.ln{width:42px}
+table.diff thead th{position:sticky;top:0;background:var(--surface);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);font-size:.82rem;letter-spacing:.04em;color:var(--accent)}
+table.diff td{vertical-align:top;padding:2px 10px;border-bottom:1px solid color-mix(in srgb,var(--line) 50%,transparent);white-space:pre-wrap;word-break:break-word}
+table.diff td.ln{color:var(--muted);text-align:right;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;padding-top:5px;user-select:none;font-variant-numeric:tabular-nums}
+td.cell.chg-l{background:var(--del)}td.cell.chg-r{background:var(--ins)}
+td.cell.empty{background:repeating-linear-gradient(135deg,transparent 0 6px,color-mix(in srgb,var(--line) 45%,transparent) 6px 7px)}
+del{background:var(--del-strong);text-decoration:none;border-radius:2px}
+ins{background:var(--ins-strong);text-decoration:none;border-radius:2px}
+td.cell.has-cm{box-shadow:inset 3px 0 0 #d4a72c}
+td.cell.flash{animation:flash 1.4s ease-out}
+@keyframes flash{from{background:var(--mark)}}
+@media (prefers-reduced-motion:reduce){td.cell.flash{animation:none;outline:2px solid #d4a72c}}
+table.diff[data-lock] td.cell{user-select:none}
+table.diff[data-lock="l"] td.cell[data-side="l"],table.diff[data-lock="m"] td.cell[data-side="m"],table.diff[data-lock="r"] td.cell[data-side="r"]{user-select:text}
+tr.same td.cell{color:var(--muted)}
+td.cell.pickable{position:relative;padding-right:30px}
+.pick{position:absolute;top:2px;right:4px;font:inherit;font-size:13px;line-height:1;width:22px;height:22px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer;opacity:.35}
+tr:hover .pick,.pick:focus-visible{opacity:1}
+td.cell.picked{box-shadow:inset 0 0 0 2px var(--accent)}
+td.cell.picked .pick{opacity:1;background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.tally{display:flex;gap:14px;flex-wrap:wrap;font-size:.85rem;color:var(--muted)}
+.tally b{color:var(--ink);font-variant-numeric:tabular-nums}
+aside{display:grid;gap:10px;align-content:start}
+@media (min-width:1200px){aside{position:sticky;top:calc(env(safe-area-inset-top,0px) + 56px);max-height:calc(100vh - 80px);overflow-y:auto}}
+aside h2{font-size:1rem;margin:0}
+.hint{font-size:.82rem;color:var(--muted);margin:0}
+.notice{font-size:.82rem;padding:8px 10px;border-radius:6px;background:var(--code)}
+.cm{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:grid;gap:6px;cursor:pointer}
+.cm.resolved{opacity:.6}
+.cm .meta{font-size:.78rem;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap}
+.cm .meta b{color:var(--accent);font-weight:700}
+.cm blockquote{margin:0;padding:4px 8px;border-left:3px solid #d4a72c;background:var(--code);font-size:.85rem;white-space:pre-wrap}
+.cm .body{white-space:pre-wrap}
+.cm .reply{font-size:.88rem;border-top:1px dashed var(--line);padding-top:6px;white-space:pre-wrap}
+.cm .reply b{font-size:.78rem;color:var(--muted)}
+.cm .acts{display:flex;gap:6px;justify-content:flex-end}
+.cm .acts button,.pop button{font:inherit;font-size:.8rem;padding:3px 10px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+#addBtn{position:fixed;z-index:20;font:inherit;font-size:.85rem;padding:4px 12px;border-radius:999px;border:0;background:var(--accent);color:var(--accent-ink);cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.pop{position:fixed;z-index:21;width:min(380px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow-y:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px;display:grid;gap:8px;box-shadow:0 8px 28px rgba(0,0,0,.2)}
+.pop blockquote{margin:0;padding:4px 8px;border-left:3px solid #d4a72c;background:var(--code);font-size:.82rem;max-height:7em;overflow:auto;white-space:pre-wrap}
+.pop textarea{font:inherit;min-height:90px;resize:vertical;padding:8px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.pop .row{display:flex;gap:8px;justify-content:flex-end;align-items:center}
+.pop .row .err{margin-right:auto;color:#c0392b;font-size:.8rem}
+.pop button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+</style>
+<div class="page">
+<header>
+<h1>READMEの推敲比べ</h1>
+<p>scrobble-gatewayのREADMEを、日本語推敲用のAgent Skill 2種（natural-japanese / yomiyasu）で別々に推敲した結果と元の版の差分。条件は共通で、文末は「である」、英数字の前後のスペースは詰める、事実・数字・リンク・表・コードは変えない（2026-10-05）。「3つを並べて選ぶ」では、違いのある行ごとに★で一番自然な版を選べる。文を範囲選択すると「コメント」ボタンが出る。選んだ結果とコメントはClaudeが読みに来る。</p>
+</header>
+<div class="bar" role="group" aria-label="比べる組み合わせ">
+<span class="lab">比べる組み合わせ</span>
+<button id="p-three" data-pair="three">3つを並べて選ぶ</button>
+<button id="p-onj" data-pair="original|natural-japanese">元 → natural-japanese</button>
+<button id="p-oyy" data-pair="original|yomiyasu">元 → yomiyasu</button>
+<button id="p-njyy" data-pair="natural-japanese|yomiyasu">natural-japanese ↔ yomiyasu</button>
+<div class="legend"><span class="l-pk">一番自然に選んだ行</span><span class="l-del">左だけ</span><span class="l-ins">右だけ</span><span class="l-cm">コメントあり</span></div>
+</div>
+<div class="tally" id="tally" hidden></div>
+<div class="main">
+<div class="diffwrap"><table class="diff" id="diff"><colgroup id="cg"></colgroup><thead><tr id="hd"></tr></thead><tbody id="rows"></tbody></table></div>
+<aside>
+<h2>コメント <span id="count" class="hint"></span></h2>
+<p class="hint">左右どちらかの列で文を範囲選択してコメントを付ける。カードを押すとその行へ移動する。</p>
+<p class="notice" id="dbNotice" hidden></p>
+<div id="list"></div>
+</aside>
+</div>
+</div>
+<button id="addBtn" type="button" hidden>コメント</button>
+<div class="pop" id="pop" hidden>
+<div class="hint" id="popMeta"></div>
+<blockquote id="popQuote"></blockquote>
+<label class="hint" for="popBody">コメント</label>
+<textarea id="popBody" placeholder="ここが不自然、こう直したい、など（Ctrl+Enterで保存、Escで閉じる）"></textarea>
+<div class="row"><span class="err" id="popErr"></span><button type="button" id="popCancel">やめる</button><button type="button" class="primary" id="popSave">保存</button></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsdiff/5.2.0/diff.min.js"></script>
+<script>
+const DOCS={"original": "# scrobble-gateway\n\n自分の Last.fm の聴取履歴を、自宅サーバーで一手に引き受けるサービスだ。\n全履歴を SQLite に持ち、毎時 Last.fm と同期し、それを MCP サーバーとして ChatGPT や Claude に開く。\n\n```\nLast.fm API ──▶ scrobble-gateway ──▶ MCP（claude.ai / ChatGPT / 自分）\n                 （マスター DB）  ──▶ health-ojimpo（日次の再生件数）\n                                 ──▶ Cosense 同期（予定）\n```\n\n## なぜ作ったか\n\n2021 年から Spotify と Apple Music の再生を Last.fm に scrobble していて、2026 年 10 月時点で 9.5 万件ある。\nこの履歴を、AI と話しながら掘り返したかった。「9 月は何をよく聴いていたか」「去年の今ごろと比べて何が増えたか」「このアーティストに最初にハマったのはいつか」。\n毎朝の音楽レコメンドを AI に作らせているので、その材料としても長期・期間別の嗜好が要る。\n\n履歴そのものは、自作の健康ダッシュボード [health-ojimpo](https://github.com/ojimpo/health-ojimpo) がすでに毎時取り込んでいた。\n最初は「health-ojimpo の DB を MCP から読めばいい」と考えたが、やめた。\nhealth-ojimpo は各サービスの API を**叩く側**として作ってきたもので、ここで他から**叩かれる側**にすると役割が崩れる。\nLast.fm の API キーと完全な履歴を持つ場所を 1 つに絞り、health-ojimpo も MCP もその利用者にする。それがこのリポジトリだ。\n\n## 設計の考え方\n\n- **Last.fm のデータの窓口はここだけにする。** API キーもマスター DB もここに 1 つずつ置く。移行が済めば health-ojimpo は日次の再生時間のような派生値だけを持ち、完全な履歴を重複して抱えない\n- **MCP は自前の DB を読む。** Last.fm API をその場で叩かないので、任意の期間で集計でき、応答も速い（9 月 1 か月分のランキングで 0.1 秒未満）。Last.fm 側の障害やレート制限の影響も受けない\n- **正本は Last.fm。** 初回は health-ojimpo の DB をコピーせず、Last.fm から全件を取り直した（9.5 万件で約 7 分）。コピーすると、取り込み側に溜まった表記揺れまで引き継ぐことになる\n- **ゼロから書かない。** 既存の Last.fm MCP を 6 つ比べて、構成がいちばん近い [sptmru/lastfm-mcp](https://github.com/sptmru/lastfm-mcp) を土台にした（比較の経緯は [DEVLOG.md](DEVLOG.md)）。コピーではなく**履歴ごと merge** してあるので、上流の修正はそのまま取り込める。そのために、こちらの変更は上流のコードと衝突しにくいよう小さく保っている\n\n## 上流から変えたこと\n\n土台の sptmru/lastfm-mcp は良くできているが、自分の 9.5 万件を載せて運用すると足りないところがあった。\n\n| 変更 | 理由 |\n| --- | --- |\n| 差分同期で直近 72 時間を取り直す | Spotify 経由の scrobble は Last.fm に**遅れて、順不同で**届く。「最新の scrobble の時刻から先」だけを取ると、後から届いた古い時刻の再生を永久に取りこぼす |\n| 起動時と毎時の自動同期 | 上流はツールか CLI で手動で同期する作りで、放っておくと索引が古くなる |\n| 名寄せ表に MBID のインデックスを張る | 上流は MusicBrainz ID の列にインデックスが無く、9.5 万件の初回名寄せが 25 分以上かかる計算だった。その間はサーバー全体が止まる。インデックスを張ると 22 秒で済む |\n| Spotify の Like を Last.fm の Love に同期する（直近に再生した曲だけ） | 上流にも同期はあるが、5,000 曲を超える Like ライブラリ全体を一度に突き合わせる方式だ。ここでは毎時、直近 72 時間に再生した曲のうち Like 済みのものだけに Love を付ける。書き込みが必ず自分の再生に結びつき、覚えのない大量の書き込みが起きない。Like を外しても Love は外さない一方向で、確実に一致した曲にしか書かない |\n| 任意期間のツール `get_top_in_range` / `compare_ranges` | 上流の期間別トップと期間比較は、Last.fm の固定期間（7 日・1 か月・12 か月など）しか受け付けない。「9 月と 8 月」「今年と去年」に答えられない |\n| OAuth 2.1 | 上流は認証を持たない。外に公開するなら必須 |\n\n## 外部サービスとの連携\n\n### Last.fm\n\n読み取りに使う API は `user.getRecentTracks` だけだ。API キーがあれば読めて、ユーザー認証は要らない。\n書き込みは Like 同期の `track.love` だけで、こちらは Shared secret で署名し、一度だけブラウザで承認して得たセッションキーを使う。\n\n実測で分かった Last.fm の癖が 2 つある。どちらも、これから Last.fm の履歴を扱う人の役に立つと思う。\n\n- **scrobble は後から届く。** health-ojimpo の取り込みを「前回の最新時刻から先」の差分取得にした途端、2 週間で 12 件の取りこぼしが出た。抜けた曲はすべて Spotify の再生で、届くのが遅れたうえに時刻の順番も前後していた。差分取得の起点は少し遡らせる必要がある\n- **全ページを順に取ると、ページの境目で同じブロックが 2 回返ってくることがある。** 一覧の総数もその分ふくらむ。主キーで重複を弾けば DB は正しくなるが、件数の検証にページ総数は使えない。`from` / `to` で期間を区切った件数を使う\n\n### MCP（claude.ai / ChatGPT）\n\nStreamable HTTP で MCP を話す。ツールは上流の約 30 個に、任意期間の 2 個を足した 32 個だ。\n直近の再生、期間別ランキング、期間比較、アーティストの聴き込み度、セッションの切り出し、時期ごとの嗜好の変化点など。一覧と使い方は [上流の README](docs/upstream-README.md) にある。\n\n認証は OAuth 2.1 にしている。ChatGPT のコネクタは OAuth しか受け付けず、claude.ai のカスタムコネクタは固定の Bearer トークンを送れない。両方から使うなら OAuth しかない。\n認可サーバーは、別に作った Cosense 用 MCP（cosense-mcp）のものを 1 人用に絞って移した。動的クライアント登録、PKCE、`resource` による宛先の検証、`iss` パラメータの完全一致など、ChatGPT と claude.ai の両方で通すために踏んだ罠ごと持ってきている。\n利用者の認証はパスフレーズ 1 つだ。\n\nMCP SDK は v2 系を使っているが、v2 にはトークン検証の部品しか無く、トークンを発行する認可サーバーの部品が無い。そこだけ SDK v1 の `mcpAuthRouter` を使っている。\n\n### Cloudflare Tunnel\n\n自宅サーバー（arigato-nas）の 4104 番を Cloudflare Tunnel で公開している。ポートは開けていない。\n\n### health-ojimpo\n\n健康ダッシュボードが Last.fm から使っていたのは、日ごとの再生件数だけだった（件数 × 3.5 分を日次の音楽再生時間とみなしている）。\nそこで、Docker ネットワークの中だけに開いた内部 REST（`GET /daily-plays`）で日次件数だけを渡している。health-ojimpo はもう Last.fm API を叩かず、完全な履歴も持たない。\nこのポートは外に公開していないので、Cloudflare Tunnel を通らず、OAuth も要らない。\n\n2026 年 10 月 5 日に切り替えた。旧来の取り込みの停止と新しい取り込みの開始は、backend の差し替え 1 回で同時に起きる作りにして、二重取り込みの期間を作らなかった。\n切り替え前に 1,933 日分の日次件数を突き合わせ、変わるのは旧データに表記揺れの重複があった 4 日だけだと確かめてから反映した。\n\n## 動かし方\n\nNode.js 22.5 以上（`node:sqlite` を使う）か Docker が要る。\n\n```bash\ncp .env.example .env\n# LASTFM_API_KEY と LASTFM_USERNAME を書く\n# 外に公開するなら MCP_PUBLIC_URL と MCP_OAUTH_PASSPHRASE も書く\ndocker compose up -d --build\ncurl -s http://127.0.0.1:4104/healthz\n```\n\n起動すると全履歴の取得が自動で始まり、終わると以後は毎時の差分同期になる。進み具合は `/healthz` で見られる。\n\n主な設定は次のとおり。全項目は [.env.example](.env.example) にある。\n\n| 変数 | 既定 | 意味 |\n| --- | --- | --- |\n| `HISTORY_INCREMENTAL_LOOKBACK_HOURS` | `72` | 差分同期で遡る時間。`0` で上流と同じ動きになる |\n| `HISTORY_AUTO_SYNC_ENABLED` | `true` | 起動時と毎時の自動同期 |\n| `MCP_PUBLIC_URL` / `MCP_OAUTH_PASSPHRASE` | なし | 両方そろうと OAuth が有効になる。片方だけなら起動しない |\n| `MCP_ALLOW_UNAUTHENTICATED` | `false` | 認証なしで HTTP を開くことを明示的に許す。何も書かないと認証なしでは起動しない |\n| `MCP_ALLOWED_HOSTS` | なし | 受け付ける Host ヘッダ。公開ホスト名を足し忘れると 403 になる |\n\nテストは `npm test`、型チェックは `npm run typecheck` で回る。\n\n## これから\n\n- **旧資産の片付け。** health-ojimpo に残してある旧来の取り込みのコードと scrobble のテーブルは、ロールバック期間が終わったら消す\n- **日本語表記と英語表記の名寄せ。** いまは「エイプリルブルー」と「AprilBlue」、「宇多田ヒカル」と「Hikaru Utada」が別のアーティストとして数えられる。MusicBrainz ID が付いていない曲が多いからだ\n- **毎朝のレコメンドへの組み込み。** 期間別の嗜好の統計を Cosense に機械的に書き出し、AI が毎朝読む嗜好プロファイルの材料にする\n- **上流への還元。** 後着の取りこぼしとインデックスの修正は、上流にもそのまま効く\n\n## ライセンスとクレジット\n\nMIT ライセンス。土台は [sptmru/lastfm-mcp](https://github.com/sptmru/lastfm-mcp)（MIT）で、その著作権表示は [LICENSE](LICENSE) にそのまま残し、こちらの変更分の表示を足してある。\n開発の経緯と判断の記録は [DEVLOG.md](DEVLOG.md) に、作業上の手引きは [CLAUDE.md](CLAUDE.md) にある。\nコードの大半は [Claude Code](https://claude.com/claude-code) と一緒に書いた。\n", "natural-japanese": "# scrobble-gateway\n\n自分のLast.fmの聴取履歴を一か所に集めて扱う、自宅サーバー上のサービスである。\n全履歴をSQLiteに保存し、毎時Last.fmと同期したうえで、MCPサーバーとしてChatGPTやClaudeから読めるようにしている。\n\n```\nLast.fm API ──▶ scrobble-gateway ──▶ MCP（claude.ai / ChatGPT / 自分）\n                 （マスター DB）  ──▶ health-ojimpo（日次の再生件数）\n                                 ──▶ Cosense 同期（予定）\n```\n\n## なぜ作ったか\n\n2021年から、SpotifyとApple Musicで再生した曲をLast.fmにscrobbleしてきた。2026年10月時点で9.5万件ある。\nこの履歴を、AIと話しながら掘り返したかった。「9月は何をよく聴いていたか」「去年の今ごろと比べて何が増えたか」「このアーティストに最初にハマったのはいつか」といった問いである。\n毎朝の音楽レコメンドもAIに作らせていて、その材料としても長期・期間別の嗜好が要る。\n\n履歴そのものは、自作の健康ダッシュボード[health-ojimpo](https://github.com/ojimpo/health-ojimpo)がすでに毎時取り込んでいた。\n最初は「health-ojimpoのDBをMCPから読めばいい」と考えたが、やめた。\nhealth-ojimpoは各サービスのAPIを**叩く側**として作ってきた。ここで他から**叩かれる側**にすると、役割が崩れる。\nLast.fmのAPIキーと完全な履歴を持つ場所を1つに絞り、health-ojimpoもMCPもその利用者にする。そのために作ったのがこのリポジトリである。\n\n## 設計の考え方\n\n- **Last.fmのデータの窓口はここだけにする。** APIキーもマスターDBも、ここに1つずつ置く。移行が済めば、health-ojimpoが持つのは日次の再生時間のような派生値だけになり、完全な履歴を重複して抱えることはない\n- **MCPは自前のDBを読む。** その場でLast.fm APIを叩かないので、任意の期間で集計でき、応答も速い（9月1か月分のランキングで0.1秒未満）。Last.fm側の障害やレート制限にも左右されない\n- **正本はLast.fm。** 初回はhealth-ojimpoのDBをコピーせず、Last.fmから全件を取り直した（9.5万件で約7分）。コピーすると、取り込み側に溜まった表記揺れまで引き継いでしまう\n- **ゼロから書かない。** 既存のLast.fm MCPを6つ比べ、構成がいちばん近い[sptmru/lastfm-mcp](https://github.com/sptmru/lastfm-mcp)を土台にした（比較の経緯は[DEVLOG.md](DEVLOG.md)）。コピーではなく**履歴ごとmerge**してあるので、上流の修正はそのまま取り込める。そのため、こちらの変更は上流のコードと衝突しにくいよう小さく保っている\n\n## 上流から変えたこと\n\n土台のsptmru/lastfm-mcpはよくできているが、自分の9.5万件を載せて運用してみると、足りないところがあった。\n\n| 変更 | 理由 |\n| --- | --- |\n| 差分同期で直近72時間を取り直す | Spotify経由のscrobbleは、Last.fmに**遅れて、順不同で**届く。「最新のscrobbleの時刻より後」だけを取ると、あとから届いた古い時刻の再生を永久に取りこぼす |\n| 起動時と毎時の自動同期 | 上流はツールかCLIから手動で同期する作りなので、放っておくと索引が古くなる |\n| 名寄せ表にMBIDのインデックスを張る | 上流はMusicBrainz IDの列にインデックスが無く、9.5万件の初回名寄せに25分以上かかる計算になっていた。その間はサーバー全体が止まる。インデックスを張れば22秒で済む |\n| SpotifyのLikeをLast.fmのLoveに同期する（直近に再生した曲だけ） | 上流にも同期はあるが、5,000曲を超えるLikeライブラリ全体を一度に突き合わせる方式である。こちらは毎時、直近72時間に再生した曲のうちLike済みのものにだけLoveを付ける。書き込みが必ず自分の再生に結びつくので、覚えのない書き込みが大量に起きることはない。同期は一方向で、Likeを外してもLoveは外さない。書くのは確実に一致した曲だけである |\n| 任意期間のツール `get_top_in_range` / `compare_ranges` | 上流の期間別トップと期間比較は、Last.fmの固定期間（7日・1か月・12か月など）しか受け付けない。これでは「9月と8月」「今年と去年」に答えられない |\n| OAuth 2.1 | 上流には認証が無い。外に公開するなら必須である |\n\n## 外部サービスとの連携\n\n### Last.fm\n\n読み取りに使うAPIは`user.getRecentTracks`だけで、APIキーさえあればユーザー認証なしで読める。\n書き込みはLike同期の`track.love`だけである。こちらはShared secretで署名し、一度だけブラウザで承認して得たセッションキーを使う。\n\n実際に動かして分かったLast.fmの癖が2つある。どちらも、これからLast.fmの履歴を扱う人の役に立つと思う。\n\n- **scrobbleは後から届く。** health-ojimpoの取り込みを「前回の最新時刻より後」だけを取る差分取得にしたところ、2週間で12件の取りこぼしが出た。抜けた曲はすべてSpotifyで再生したもので、届くのが遅れたうえに、時刻の順番も前後していた。差分取得の起点は少し遡らせておく必要がある\n- **全ページを順に取ると、ページの境目で同じブロックが2回返ってくることがある。** そのぶん一覧の総数もふくらむ。主キーで重複を弾けばDBは正しくなるが、件数の検証にページ総数は使えない。`from` / `to`で期間を区切った件数を使う\n\n### MCP（claude.ai / ChatGPT）\n\nMCPはStreamable HTTPで話す。ツールは上流の約30個に任意期間の2個を足した、32個である。\n直近の再生、期間別ランキング、期間比較、アーティストの聴き込み度、セッションの切り出し、時期ごとの嗜好の変化点などを扱える。一覧と使い方は[上流の README](docs/upstream-README.md)にある。\n\n認証はOAuth 2.1にした。ChatGPTのコネクタはOAuthしか受け付けず、claude.aiのカスタムコネクタは固定のBearerトークンを送れない。両方から使うなら、OAuthしか選択肢がない。\n認可サーバーは、別に作ったCosense用MCP（cosense-mcp）のものを1人用に絞って移植した。動的クライアント登録、PKCE、`resource`による宛先の検証、`iss`パラメータの完全一致など、ChatGPTとclaude.aiの両方で通すために踏んだ罠への対処も、そのまま持ってきている。\n利用者の認証はパスフレーズ1つで行う。\n\nMCP SDKはv2系を使っている。ただ、v2にはトークンを検証する部品しか無く、トークンを発行する認可サーバーの部品が無い。そこだけSDK v1の`mcpAuthRouter`を使っている。\n\n### Cloudflare Tunnel\n\n自宅サーバー（arigato-nas）の4104番をCloudflare Tunnelで公開している。ポートは開けていない。\n\n### health-ojimpo\n\n健康ダッシュボードがLast.fmから使っていたのは日ごとの再生件数だけで、件数×3.5分をその日の音楽再生時間とみなしている。\nそこで、Dockerネットワークの中だけに開いた内部REST（`GET /daily-plays`）で、日次の件数だけを渡すようにした。health-ojimpoはもうLast.fm APIを叩かず、完全な履歴も持たない。\nこのポートは外に公開していないので、Cloudflare Tunnelを通らず、OAuthも要らない。\n\n切り替えは2026年10月5日に行った。backendの差し替え1回で旧来の取り込みの停止と新しい取り込みの開始が同時に起きるようにしておき、二重取り込みの期間を作らなかった。\n切り替え前に1,933日分の日次件数を突き合わせ、違いが出るのは旧データに表記揺れの重複があった4日だけだと確かめてから反映した。\n\n## 動かし方\n\nNode.js 22.5以上（`node:sqlite`を使うため）か、Dockerが必要である。\n\n```bash\ncp .env.example .env\n# LASTFM_API_KEY と LASTFM_USERNAME を書く\n# 外に公開するなら MCP_PUBLIC_URL と MCP_OAUTH_PASSPHRASE も書く\ndocker compose up -d --build\ncurl -s http://127.0.0.1:4104/healthz\n```\n\n起動すると全履歴の取得が自動で始まり、終わったあとは毎時の差分同期に切り替わる。進み具合は`/healthz`で確認できる。\n\n主な設定は次のとおり。全項目は[.env.example](.env.example)にある。\n\n| 変数 | 既定 | 意味 |\n| --- | --- | --- |\n| `HISTORY_INCREMENTAL_LOOKBACK_HOURS` | `72` | 差分同期で遡る時間。`0`にすると上流と同じ動きになる |\n| `HISTORY_AUTO_SYNC_ENABLED` | `true` | 起動時と毎時の自動同期 |\n| `MCP_PUBLIC_URL` / `MCP_OAUTH_PASSPHRASE` | なし | 両方そろうとOAuthが有効になる。片方だけでは起動しない |\n| `MCP_ALLOW_UNAUTHENTICATED` | `false` | 認証なしでHTTPを開くことを明示的に許可する。指定しなければ、認証なしでは起動しない |\n| `MCP_ALLOWED_HOSTS` | なし | 受け付けるHostヘッダ。公開ホスト名を足し忘れると403になる |\n\nテストは`npm test`、型チェックは`npm run typecheck`で実行できる。\n\n## これから\n\n- **旧資産の片付け。** health-ojimpoに残してある旧来の取り込みコードとscrobbleのテーブルは、ロールバック期間が終わったら消す\n- **日本語表記と英語表記の名寄せ。** いまは「エイプリルブルー」と「AprilBlue」、「宇多田ヒカル」と「Hikaru Utada」が別のアーティストとして数えられている。MusicBrainz IDの付いていない曲が多いためである\n- **毎朝のレコメンドへの組み込み。** 期間別の嗜好の統計をCosenseへ機械的に書き出し、AIが毎朝読む嗜好プロファイルの材料にする\n- **上流への還元。** 後着分の取りこぼしとインデックスの修正は、上流でもそのまま効く\n\n## ライセンスとクレジット\n\nMITライセンス。土台は[sptmru/lastfm-mcp](https://github.com/sptmru/lastfm-mcp)（MIT）で、その著作権表示は[LICENSE](LICENSE)にそのまま残したうえで、こちらの変更分の表示を足してある。\n開発の経緯と判断の記録は[DEVLOG.md](DEVLOG.md)に、作業上の手引きは[CLAUDE.md](CLAUDE.md)にまとめてある。\nコードの大半は[Claude Code](https://claude.com/claude-code)と一緒に書いた。\n", "yomiyasu": "# scrobble-gateway\n\nLast.fmにある自分の聴取履歴を、自宅サーバーでまとめて預かるサービスである。\n全履歴をSQLiteに保存して毎時Last.fmと同期し、MCPサーバーとしてChatGPTやClaudeから読めるようにしている。\n\n```\nLast.fm API ──▶ scrobble-gateway ──▶ MCP（claude.ai / ChatGPT / 自分）\n                 （マスター DB）  ──▶ health-ojimpo（日次の再生件数）\n                                 ──▶ Cosense 同期（予定）\n```\n\n## なぜ作ったか\n\n2021年からSpotifyとApple Musicの再生をLast.fmにscrobbleしていて、2026年10月時点で9.5万件ある。\nこの履歴を、AIと話しながら掘り返したかった。「9月は何をよく聴いていたか」「去年の今ごろと比べて何が増えたか」「このアーティストに最初にハマったのはいつか」といったことである。\n毎朝の音楽レコメンドもAIに作らせているので、その材料として長期・期間別の嗜好も要る。\n\n履歴そのものは、自作の健康ダッシュボード[health-ojimpo](https://github.com/ojimpo/health-ojimpo)がすでに毎時取り込んでいた。\n最初は「health-ojimpoのDBをMCPから読めばいい」と考えたが、やめた。\nhealth-ojimpoは各サービスのAPIを**叩く側**として作ってきたので、ここで他から**叩かれる側**にすると役割が崩れる。\nLast.fmのAPIキーと完全な履歴を持つ場所は1つに絞り、health-ojimpoもMCPもその利用者にする。そのために作ったのがこのリポジトリである。\n\n## 設計の考え方\n\n- **Last.fmのデータの窓口はここだけにする。** APIキーもマスターDBもここに1つずつ置く。移行が済めば、health-ojimpoは日次の再生時間のような派生値だけを持ち、完全な履歴を重複して抱えない\n- **MCPは自前のDBを読む。** その場でLast.fm APIを叩かないので、任意の期間で集計でき、応答も速い（9月の1か月分のランキングで0.1秒未満）。Last.fm側の障害やレート制限の影響も受けない\n- **正本はLast.fm。** 初回はhealth-ojimpoのDBをコピーせず、Last.fmから全件を取り直した（9.5万件で約7分）。コピーすると、取り込み側に溜まった表記揺れまで引き継いでしまう\n- **ゼロから書かない。** 既存のLast.fm MCPを6つ比べて、構成がいちばん近い[sptmru/lastfm-mcp](https://github.com/sptmru/lastfm-mcp)を土台にした（比較の経緯は[DEVLOG.md](DEVLOG.md)）。コピーではなく**履歴ごとmerge**してあるので、上流の修正はそのまま取り込める。そのために、こちらの変更は上流のコードと衝突しにくいよう小さく保っている\n\n## 上流から変えたこと\n\n土台のsptmru/lastfm-mcpは良くできているが、自分の9.5万件を載せて運用してみると足りないところがあった。\n\n| 変更 | 理由 |\n| --- | --- |\n| 差分同期で直近72時間を取り直す | Spotify経由のscrobbleはLast.fmに**遅れて、順不同で**届く。「最新のscrobbleの時刻から先」だけを取ると、後から届いた古い時刻の再生をずっと取りこぼしたままになる |\n| 起動時と毎時の自動同期 | 上流はツールかCLIで手動で同期する作りで、放っておくと索引が古くなる |\n| 名寄せ表にMBIDのインデックスを張る | 上流はMusicBrainz IDの列にインデックスが無く、9.5万件の初回名寄せに25分以上かかる計算だった。その間はサーバー全体が止まる。インデックスを張ると22秒で済む |\n| SpotifyのLikeをLast.fmのLoveに同期する（直近に再生した曲だけ） | 上流にも同期はあるが、5,000曲を超えるLikeライブラリ全体を一度に突き合わせる方式である。ここでは毎時、直近72時間に再生した曲のうちLike済みのものだけにLoveを付ける。こうすると書き込みが必ず自分の再生に結びつき、覚えのない大量の書き込みが起きない。Likeを外してもLoveは外さない一方向の同期で、確実に一致した曲にしか書かない |\n| 任意期間のツール `get_top_in_range` / `compare_ranges` | 上流の期間別トップと期間比較は、Last.fmの固定期間（7日・1か月・12か月など）しか受け付けない。これでは「9月と8月」「今年と去年」に答えられない |\n| OAuth 2.1 | 上流は認証を持たない。外に公開するなら必須 |\n\n## 外部サービスとの連携\n\n### Last.fm\n\n読み取りに使うAPIは`user.getRecentTracks`だけである。APIキーがあれば読めて、ユーザー認証は要らない。\n書き込みはLike同期の`track.love`だけで、こちらはShared secretで署名し、一度だけブラウザで承認して得たセッションキーを使う。\n\n実際に動かしてみて、Last.fmの癖が2つ分かった。どちらも、これからLast.fmの履歴を扱う人の役に立つと思う。\n\n- **scrobbleは後から届く。** health-ojimpoの取り込みを「前回の最新時刻から先」の差分取得にした途端、2週間で12件の取りこぼしが出た。抜けた曲はすべてSpotifyの再生で、届くのが遅れたうえに時刻の順番も前後していた。差分取得の起点は少し遡らせる必要がある\n- **全ページを順に取ると、ページの境目で同じブロックが2回返ってくることがある。** そのぶん一覧の総数もふくらむ。主キーで重複を弾けばDBは正しくなるが、件数の検証にページ総数は使えない。`from` / `to`で期間を区切った件数を使う\n\n### MCP（claude.ai / ChatGPT）\n\nMCPはStreamable HTTPで提供している。ツールは上流の約30個に任意期間の2個を足して、32個ある。\n直近の再生、期間別ランキング、期間比較、アーティストの聴き込み度、セッションの切り出し、時期ごとの嗜好の変化点などを扱える。一覧と使い方は[上流の README](docs/upstream-README.md)にある。\n\n認証はOAuth 2.1にしている。ChatGPTのコネクタはOAuthしか受け付けず、claude.aiのカスタムコネクタは固定のBearerトークンを送れない。両方から使うならOAuthしかない。\n認可サーバーは、別に作ったCosense用MCP（cosense-mcp）のものを1人用に絞って移した。動的クライアント登録、PKCE、`resource`による宛先の検証、`iss`パラメータの完全一致など、ChatGPTとclaude.aiの両方で通すために踏んだ罠の対策もまとめて持ってきている。\n利用者の認証はパスフレーズ1つで行う。\n\nMCP SDKはv2系を使っている。ただしv2にはトークン検証の部品しか無く、トークンを発行する認可サーバーの部品が無いので、そこだけSDK v1の`mcpAuthRouter`を使っている。\n\n### Cloudflare Tunnel\n\n自宅サーバー（arigato-nas）の4104番をCloudflare Tunnelで公開している。ポートは開けていない。\n\n### health-ojimpo\n\n健康ダッシュボードがLast.fmから使っていたのは、日ごとの再生件数だけである（件数×3.5分を日次の音楽再生時間とみなしている）。\nそこで、Dockerネットワークの中だけに開いた内部REST（`GET /daily-plays`）で日次件数だけを渡している。health-ojimpoはもうLast.fm APIを叩かず、完全な履歴も持たない。\nこのポートは外に公開していないので、Cloudflare Tunnelを通らず、OAuthも要らない。\n\n切り替えは2026年10月5日に行った。旧来の取り込みの停止と新しい取り込みの開始がbackendの差し替え1回で同時に起きるようにして、二重取り込みの期間を作らなかった。\n切り替え前に1,933日分の日次件数を突き合わせ、変わるのは旧データに表記揺れの重複があった4日だけだと確かめてから反映した。\n\n## 動かし方\n\nNode.js 22.5以上（`node:sqlite`を使う）かDockerが要る。\n\n```bash\ncp .env.example .env\n# LASTFM_API_KEY と LASTFM_USERNAME を書く\n# 外に公開するなら MCP_PUBLIC_URL と MCP_OAUTH_PASSPHRASE も書く\ndocker compose up -d --build\ncurl -s http://127.0.0.1:4104/healthz\n```\n\n起動すると全履歴の取得が自動で始まり、終わるとその後は毎時の差分同期に移る。進み具合は`/healthz`で見られる。\n\n主な設定は次のとおり。全項目は[.env.example](.env.example)にある。\n\n| 変数 | 既定 | 意味 |\n| --- | --- | --- |\n| `HISTORY_INCREMENTAL_LOOKBACK_HOURS` | `72` | 差分同期で遡る時間。`0`で上流と同じ動きになる |\n| `HISTORY_AUTO_SYNC_ENABLED` | `true` | 起動時と毎時の自動同期 |\n| `MCP_PUBLIC_URL` / `MCP_OAUTH_PASSPHRASE` | なし | 両方そろうとOAuthが有効になる。片方だけなら起動しない |\n| `MCP_ALLOW_UNAUTHENTICATED` | `false` | 認証なしでHTTPを開くことを明示的に許す。何も書かないと認証なしでは起動しない |\n| `MCP_ALLOWED_HOSTS` | なし | 受け付けるHostヘッダ。公開ホスト名を足し忘れると403になる |\n\nテストは`npm test`、型チェックは`npm run typecheck`で回す。\n\n## これから\n\n- **旧資産の片付け。** health-ojimpoに残してある旧来の取り込みのコードとscrobbleのテーブルは、ロールバック期間が終わったら消す\n- **日本語表記と英語表記の名寄せ。** いまは「エイプリルブルー」と「AprilBlue」、「宇多田ヒカル」と「Hikaru Utada」が別のアーティストとして数えられている。MusicBrainz IDが付いていない曲が多いためである\n- **毎朝のレコメンドへの組み込み。** 期間別の嗜好の統計をCosenseに機械的に書き出し、AIが毎朝読む嗜好プロファイルの材料にする\n- **上流への還元。** 後着の取りこぼしとインデックスの修正は、上流にもそのまま効く\n\n## ライセンスとクレジット\n\nMITライセンス。土台は[sptmru/lastfm-mcp](https://github.com/sptmru/lastfm-mcp)（MIT）で、その著作権表示は[LICENSE](LICENSE)にそのまま残し、こちらの変更分の表示を足してある。\n開発の経緯と判断の記録は[DEVLOG.md](DEVLOG.md)に、作業上の手引きは[CLAUDE.md](CLAUDE.md)にある。\nコードの大半は[Claude Code](https://claude.com/claude-code)と一緒に書いた。\n"};
+const NAMES={"original":"元の版","natural-japanese":"natural-japanese 版","yomiyasu":"yomiyasu 版"};
+const LINES={};for(const k in DOCS)LINES[k]=DOCS[k].replace(/\n$/,"").split("\n");
+const $=id=>document.getElementById(id);
+const ORDER=["original","natural-japanese","yomiyasu"];
+let pair=["three"],comments=[],picks={},db=null,pending=null,selRect=null;
+function esc(s){return s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}
+function cell(side,ver,ln,html,cls){return `<td class="ln">${ln??""}</td><td class="cell ${cls||""}" data-side="${side}" ${ln?`data-version="${ver}" data-line="${ln}"`:""}>${html}</td>`}
+function charHtml(base,txt){let o="";for(const p of Diff.diffChars(base,txt)){if(p.added)o+=`<ins>${esc(p.value)}</ins>`;else if(!p.removed)o+=esc(p.value)}return o}
+function renderThree(){
+ $("cg").innerHTML='<col class="ln"><col><col><col>';$("hd").innerHTML="<th></th>"+ORDER.map(v=>`<th>${NAMES[v]}</th>`).join("");
+ const O=LINES.original,n=Math.max(...ORDER.map(v=>LINES[v].length));let out=[];
+ for(let i=0;i<n;i++){const t=ORDER.map(v=>LINES[v][i]??"");const same=t.every(x=>x===t[0]);const ln=i+1;
+  const cells=ORDER.map((v,k)=>{const side="lmr"[k];const html=k===0||same?esc(t[k]):charHtml(t[0],t[k]);
+   const pk=same||!t.join("").trim()?"":`<button type="button" class="pick" data-line="${ln}" data-choice="${v}" aria-label="${NAMES[v]}を一番自然に選ぶ" title="これが一番自然">★</button>`;
+   return `<td class="cell${pk?" pickable":""}" data-side="${side}" data-version="${v}" data-line="${ln}">${html}${pk}</td>`}).join("");
+  out.push(`<tr class="${same?"same":"chg"}" data-line="${ln}"><td class="ln">${ln}</td>${cells}</tr>`)}
+ $("rows").innerHTML=out.join("");}
+function render(){
+ document.querySelectorAll(".bar button").forEach(x=>x.setAttribute("aria-pressed",String(x.dataset.pair===pair.join("|"))));
+ $("tally").hidden=pair[0]!=="three";
+ if(pair[0]==="three"){renderThree();markCommented();markPicks();try{localStorage.setItem("readme-compare-pair","three")}catch(e){}return}
+ const [a,b]=pair;$("cg").innerHTML='<col class="ln"><col><col class="ln"><col>';$("hd").innerHTML=`<th></th><th>${NAMES[a]}</th><th></th><th>${NAMES[b]}</th>`;
+ const A=LINES[a],B=LINES[b],chunks=Diff.diffArrays(A,B);let ia=0,ib=0,out=[];
+ for(let i=0;i<chunks.length;i++){const c=chunks[i];
+  if(!c.added&&!c.removed){for(const l of c.value){ia++;ib++;out.push(`<tr>${cell("l",a,ia,esc(l))}${cell("r",b,ib,esc(l))}</tr>`)}continue}
+  let rem=[],add=[];if(c.removed){rem=c.value;if(chunks[i+1]&&chunks[i+1].added){add=chunks[i+1].value;i++}}else add=c.value;
+  const n=Math.max(rem.length,add.length);
+  for(let j=0;j<n;j++){const l=rem[j],r=add[j];
+   if(l!==undefined&&r!==undefined){let L="",R="";for(const p of Diff.diffChars(l,r)){if(p.added)R+=`<ins>${esc(p.value)}</ins>`;else if(p.removed)L+=`<del>${esc(p.value)}</del>`;else{L+=esc(p.value);R+=esc(p.value)}}
+    ia++;ib++;out.push(`<tr>${cell("l",a,ia,L,"chg-l")}${cell("r",b,ib,R,"chg-r")}</tr>`)}
+   else if(l!==undefined){ia++;out.push(`<tr>${cell("l",a,ia,`<del>${esc(l)}</del>`,"chg-l")}${cell("r",b,null,"","empty")}</tr>`)}
+   else{ib++;out.push(`<tr>${cell("l",a,null,"","empty")}${cell("r",b,ib,`<ins>${esc(r)}</ins>`,"chg-r")}</tr>`)}}}
+ $("rows").innerHTML=out.join("");markCommented();
+ try{localStorage.setItem("readme-compare-pair",pair.join("|"))}catch(e){}}
+function markCommented(){document.querySelectorAll("td.cell.has-cm").forEach(c=>c.classList.remove("has-cm"));
+ for(const c of comments){if(c.status==="resolved")continue;for(let l=c.line;l<=(c.lineEnd||c.line);l++){document.querySelectorAll(`td.cell[data-version="${c.version}"][data-line="${l}"]`).forEach(x=>x.classList.add("has-cm"))}}}
+document.querySelectorAll(".bar button").forEach(x=>x.addEventListener("click",()=>{pair=x.dataset.pair.split("|");render()}));
+// keep a selection inside one column
+$("diff").addEventListener("mousedown",e=>{if(e.target.closest(".pick"))return;const c=e.target.closest("td.cell");const t=$("diff");if(c)t.dataset.lock=c.dataset.side;else delete t.dataset.lock;hideAdd()});
+$("rows").addEventListener("click",async e=>{const b=e.target.closest(".pick");if(!b)return;e.stopPropagation();
+ if(!db){alertBox("保存先に繋がっていないため選べない");return}
+ const line=+b.dataset.line,choice=b.dataset.choice,ref=db.doc("picks/L"+line);b.disabled=true;
+ try{if(picks[line]&&picks[line].choice===choice)await ref.delete();else await ref.set({line,choice,texts:Object.fromEntries(ORDER.map(v=>[v,LINES[v][line-1]??""])),updatedAt:new Date().toISOString()})}
+ catch(err){alertBox("保存できなかった（"+(err&&err.code||"error")+"）")}finally{b.disabled=false}});
+function alertBox(m){const n=$("dbNotice");n.hidden=false;n.textContent=m}
+function markPicks(){document.querySelectorAll("td.cell.picked").forEach(c=>c.classList.remove("picked"));
+ for(const k in picks){const p=picks[k];const c=document.querySelector(`tr[data-line="${p.line}"] td.cell[data-version="${p.choice}"]`);if(c)c.classList.add("picked")}
+ const changed=document.querySelectorAll("tr.chg").length,cnt={};for(const v of ORDER)cnt[v]=0;let total=0;for(const k in picks){if(cnt[picks[k].choice]!==undefined){cnt[picks[k].choice]++;total++}}
+ $("tally").innerHTML=`<span>違いのある行 <b>${changed}</b></span>`+ORDER.map(v=>`<span>${NAMES[v]} <b>${cnt[v]}</b></span>`).join("")+`<span>未選択 <b>${Math.max(changed-total,0)}</b></span>`}
+document.addEventListener("mouseup",e=>{if(e.target.closest("#pop,#addBtn"))return;setTimeout(()=>{
+ const s=getSelection();if(!s||s.isCollapsed){hideAdd();return}
+ const text=s.toString().trim();if(!text){hideAdd();return}
+ const r=s.getRangeAt(0);const cellOf=n=>(n.nodeType===1?n:n.parentElement)?.closest("td.cell[data-line]");
+ const c1=cellOf(r.startContainer),c2=cellOf(r.endContainer);if(!c1||!$("diff").contains(c1)){hideAdd();return}
+ const ver=c1.dataset.version,l1=+c1.dataset.line,l2=c2&&c2.dataset.version===ver?+c2.dataset.line:l1;
+ pending={version:ver,line:Math.min(l1,l2),lineEnd:Math.max(l1,l2),quote:text.slice(0,2000),pair:pair.join("|")};
+ const rect=r.getBoundingClientRect(),b=$("addBtn");selRect={top:rect.top,bottom:rect.bottom,left:rect.left,right:rect.right};b.hidden=false;b.style.left=Math.min(rect.right+6,innerWidth-100)+"px";b.style.top=Math.max(rect.top-34,8)+"px"},0)});
+function hideAdd(){$("addBtn").hidden=true}
+$("addBtn").addEventListener("click",()=>{if(!pending)return;hideAdd();const p=$("pop"),b=$("addBtn");
+ $("popMeta").textContent=`${NAMES[pending.version]} ${pending.line===pending.lineEnd?"L"+pending.line:"L"+pending.line+"–"+pending.lineEnd}`;
+ $("popQuote").textContent=pending.quote;$("popBody").value="";$("popErr").textContent="";
+ p.hidden=false;placePop();$("popBody").focus({preventScroll:true})});
+// Measure the popup and keep it inside the viewport: below the selection when it fits, otherwise above it.
+function placePop(){const p=$("pop"),h=p.offsetHeight,w=p.offsetWidth,r=selRect||{top:innerHeight/2,bottom:innerHeight/2,left:16,right:16};
+ let top=r.bottom+8;if(top+h>innerHeight-16)top=r.top-h-8;top=Math.min(Math.max(16,top),Math.max(16,innerHeight-h-16));
+ const left=Math.min(Math.max(16,r.left),Math.max(16,innerWidth-w-16));p.style.top=top+"px";p.style.left=left+"px"}
+addEventListener("resize",()=>{if(!$("pop").hidden)placePop()});
+$("popBody").addEventListener("keydown",e=>{if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){e.preventDefault();$("popSave").click()}else if(e.key==="Escape"){$("pop").hidden=true}});
+$("popCancel").addEventListener("click",()=>{$("pop").hidden=true});
+$("popSave").addEventListener("click",async()=>{const body=$("popBody").value.trim();if(!body){$("popErr").textContent="コメントを入力してください";return}
+ if(!db){$("popErr").textContent="保存先に繋がっていないため保存できません";return}
+ const btn=$("popSave");btn.disabled=true;
+ try{await db.collection("comments").add({...pending,body,status:"open",reply:"",createdAt:new Date().toISOString()});$("pop").hidden=true;getSelection().removeAllRanges()}
+ catch(e){$("popErr").textContent="保存できませんでした（"+(e&&e.code||"error")+"）"}finally{btn.disabled=false}});
+function renderList(){const list=$("list");$("count").textContent=comments.length?`${comments.filter(c=>c.status!=="resolved").length}件未解決 / 全${comments.length}件`:"";
+ if(!comments.length){list.innerHTML='<p class="hint">まだコメントはない。</p>';return}
+ list.innerHTML="";for(const c of comments){const el=document.createElement("div");el.className="cm"+(c.status==="resolved"?" resolved":"");
+  el.innerHTML=`<div class="meta"><b></b><span class="ln"></span><span class="when"></span></div><blockquote></blockquote><div class="body"></div>${c.reply?'<div class="reply"><b>Claudeの返信</b><div class="rt"></div></div>':""}<div class="acts"><button type="button" class="res"></button><button type="button" class="delb">削除</button></div>`;
+  el.querySelector(".meta b").textContent=NAMES[c.version]||c.version;el.querySelector(".ln").textContent=c.line===(c.lineEnd||c.line)?`L${c.line}`:`L${c.line}–${c.lineEnd}`;
+  el.querySelector(".when").textContent=(c.createdAt||"").slice(5,16).replace("T"," ");el.querySelector("blockquote").textContent=c.quote;el.querySelector(".body").textContent=c.body;
+  if(c.reply)el.querySelector(".rt").textContent=c.reply;
+  const res=el.querySelector(".res");res.textContent=c.status==="resolved"?"未解決に戻す":"解決";
+  res.addEventListener("click",async e=>{e.stopPropagation();res.disabled=true;try{await db.doc("comments/"+c.id).update({status:c.status==="resolved"?"open":"resolved"})}catch(_){res.disabled=false}});
+  el.querySelector(".delb").addEventListener("click",async e=>{e.stopPropagation();const b=e.currentTarget;if(b.dataset.confirm!=="1"){b.dataset.confirm="1";b.textContent="本当に削除";return}b.disabled=true;try{await db.doc("comments/"+c.id).delete()}catch(_){b.disabled=false}});
+  el.addEventListener("click",()=>jump(c));list.appendChild(el)}}
+function jump(c){if(pair[0]!=="three"&&!pair.includes(c.version)){const want=c.pair&&c.pair.split("|").includes(c.version)?c.pair.split("|"):(c.version==="original"?["original","natural-japanese"]:["original",c.version]);pair=want;render()}
+ const t=document.querySelector(`td.cell[data-version="${c.version}"][data-line="${c.line}"]`);if(!t)return;t.scrollIntoView({block:"center",behavior:"smooth"});
+ t.classList.remove("flash");void t.offsetWidth;t.classList.add("flash")}
+(async()=>{let init="three";try{init=localStorage.getItem("readme-compare-pair")||init}catch(e){}
+ if(document.querySelector(`.bar button[data-pair="${init}"]`))pair=init.split("|");render();renderList();
+ db=await window.claude?.use?.("db")??null;
+ if(!db){const n=$("dbNotice");n.hidden=false;n.textContent="この表示ではコメントを保存できない（サインインしていない、または権限がない）。差分は見られる。";return}
+ db.collection("comments").orderBy("createdAt","asc").onSnapshot(s=>{comments=s.docs.map(d=>({id:d.id,...d.data()}));renderList();markCommented()},
+  e=>{alertBox("コメントの読み込みが止まった（"+(e&&e.code)+"）。再読み込みで直ることがある。")});
+ db.collection("picks").onSnapshot(s=>{picks={};for(const d of s.docs){const v=d.data();picks[v.line]=v}if(pair[0]==="three")markPicks()},
+  e=>alertBox("選択の読み込みが止まった（"+(e&&e.code)+"）。再読み込みで直ることがある。"))})();
+</script>
