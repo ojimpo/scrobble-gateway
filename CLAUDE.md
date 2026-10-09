@@ -13,7 +13,7 @@ Last.fm データの唯一の窓口になる独立サービス。Last.fm API キ
 
 ## 状態
 
-**2026-10-05: arigato-nas の 4104 番で稼働中。`/mcp` は OAuth 必須。** 全履歴 95,105件を Last.fm から取得済みで、health.db と1件残らず一致。毎時の差分同期が動いている。
+**2026-10-05: arigato-nas の 4104 番で稼働中。`/mcp` は OAuth 必須。** 全履歴 95,105件を Last.fm から取得済みで、health.db と1件残らず一致。差分同期が2分おきに動いている（2026-10-10 に毎時から変更。Spotify→Last.fm の scrobble はほぼリアルタイムで入るので、遅れの原因はこちらの取り込み間隔だけだった）。
 **2026-10-05 から `https://scrobble-gateway.ojimpo.com/mcp` で公開中**（Cloudflare Tunnel。OAuth の一連の流れを公開 URL 越しに確認済み）。
 **2026-10-05 に health-ojimpo を切り替え済み**（移行順序の 4〜5）。health-ojimpo は Last.fm API を叩かず、内部 REST から日次件数だけを受け取る。GitHub は `ojimpo/scrobble-gateway`（public）。README は だ・である調の日本語で、英数字の前後のスペースは詰める（本人指定）。**README を直すときは natural-japanese skill を通す**（2026-10-05 に yomiyasu と比べて採用。比較の記録は `docs/readme-review/`）。上流の英語 README は `docs/upstream-README.md` に残してある（ツール一覧の参照用）。
 仕様・判断履歴の正本は Cosense `Last.fm MCP・音楽レコメンド基盤 NAS調査引継ぎ`。経過は DEVLOG.md。
@@ -96,6 +96,8 @@ sudo systemctl restart cloudflared
 - Last.fm の API キーを URL に含めてログへ出さない（health-ojimpo の httpx は INFO で URL 全体を出していた）。2026-10-04 時点のコンテナログにキーは出ていない（確認済み）
 
 ## 落とし穴
+
+- **同期間隔は `HISTORY_AUTO_SYNC_INTERVAL_SECONDS`（下限60、現在120）。** 2分おきでも1回2秒で済む（差分は72時間遡って2ページ）。ただし**再起動後の最初の1回だけ約4分かかる**。Like→Love が Spotify の Like 一覧を全件取り直すため（キャッシュは6時間）。その間は次の同期が待たされるだけで、`/healthz` は返る
 
 - **名寄せ（`ensureCanonicalIndex`）は同期 API の SQLite で走るので、走っている間はイベントループごと止まる。** `/healthz` も返らない
   - 上流は MBID 列にインデックスが無く、95,105件の初回索引が1秒67件しか進まなかった（25分超）。インデックスを張って22秒になった
