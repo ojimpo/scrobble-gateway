@@ -1,5 +1,5 @@
 import type { LastFmApi, RecentTrack } from "./domain.js";
-import { HistoryRepository } from "./history-repository.js";
+import { HistoryRepository, normalize } from "./history-repository.js";
 
 export type SyncMode = "incremental" | "full";
 
@@ -66,15 +66,25 @@ export class HistorySyncService {
     }
     const newestUnix = before.newestScrobbleAt ? Math.floor(Date.parse(before.newestScrobbleAt) / 1_000) : undefined;
     const fullProgress = mode === "full" ? this.repository.getFullSyncProgress(this.username) : null;
-    // Incremental runs re-read the newest second inclusively. Full runs keep a
-    // persistent oldest cursor so a capped backfill resumes instead of
-    // repeatedly downloading the same newest slice.
-    const cursorFrom = mode === "incremental" && newestUnix !== undefined ? newestUnix : undefined;
-    const upperBoundary = mode === "full" ? (fullProgress?.upperUnix ?? startedAtUnix) : startedAtUnix;
+    const incrementalProgress = mode === "incremental" ? this.repository.getIncrementalSyncProgress(this.username) : null;
+    // Freeze the upper boundary until this pass completes. Advancing newestUnix
+    // must not move the lookback window past an unfinished slice of history.
+    const upperBoundary = mode === "full"
+      ? (fullProgress?.upperUnix ?? startedAtUnix)
+      : (incrementalProgress?.upperUnix ?? startedAtUnix);
     const to = mode === "full" ? (fullProgress?.cursorUnix ?? upperBoundary) : upperBoundary;
-    let from = cursorFrom === undefined || this.incrementalLookbackSeconds <= 0
-      ? cursorFrom
-      : Math.max(cursorFrom - this.incrementalLookbackSeconds, 0);
+    const lowerBoundary = mode === "full" ? undefined : incrementalProgress
+      ? (incrementalProgress.cursorUnix ?? undefined)
+      : newestUnix === undefined ? undefined : Math.max(newestUnix - this.incrementalLookbackSeconds, 0);
+    // Last.fm documents `from` as "after" a timestamp. Request the preceding
+    // second and filter locally so boundary ties survive exclusive endpoints.
+    const from = lowerBoundary === undefined ? undefined : Math.max(lowerBoundary - 1, 0);
+    const resumedBoundaryKeys = new Set(incrementalProgress?.boundaryKeys ?? []);
+    let cursorUnix = lowerBoundary ?? null;
+    let boundaryKeys = new Set(resumedBoundaryKeys);
+    const saveIncrementalProgress = () => this.repository.setIncrementalSyncProgress(this.username, {
+      cursorUnix, upperUnix: upperBoundary, boundaryKeys: [...boundaryKeys],
+    });
 
     let scannedTracks = 0;
     let storedRowsChanged = 0;
@@ -83,26 +93,21 @@ export class HistorySyncService {
     let completedRequestedRange = false;
     let oldestSelectedUnix: number | null = null;
 
-    let first = await this.api.getRecentTracksPage({
+    const first = await this.api.getRecentTracksPage({
       ...(from === undefined ? {} : { from }),
       to,
       page: 1,
       limit: 200,
     });
     pagesFetched += 1;
-    // A capped backlog must advance from the cursor itself. With the lookback
-    // window it would re-read the same already-indexed oldest slice forever.
-    if (from !== cursorFrom && first.pageInfo.total > maxTracks) {
-      from = cursorFrom;
-      first = await this.api.getRecentTracksPage({ ...(from === undefined ? {} : { from }), to, page: 1, limit: 200 });
-      pagesFetched += 1;
-    }
     totalReportedByLastFm = first.pageInfo.total;
+    // Persist before storing any rows, so an error or process restart cannot
+    // replace the unfinished window with one based on the updated newest play.
+    if (mode === "incremental") saveIncrementalProgress();
 
-    // A capped incremental run must advance from the oldest edge of the
-    // backlog. If it stored the newest slice, the next `from` cursor would
-    // skip the unprocessed middle forever.
-    const oldestFirst = mode === "incremental" && first.pageInfo.total > maxTracks;
+    // Incremental pages advance from the oldest edge, even if the whole range
+    // fits the budget: a later page may fail after earlier pages were saved.
+    const oldestFirst = mode === "incremental";
     let page = oldestFirst ? Math.max(first.pageInfo.totalPages, 1) : 1;
     let response = page === 1
       ? first
@@ -110,7 +115,9 @@ export class HistorySyncService {
     if (page !== 1) pagesFetched += 1;
 
     while (scannedTracks < maxTracks) {
-      const historical = response.tracks.filter(isHistorical);
+      const historical = response.tracks.filter(isHistorical).filter((track) =>
+        lowerBoundary === undefined || (track.playedAtUnix >= lowerBoundary
+          && (track.playedAtUnix !== lowerBoundary || !resumedBoundaryKeys.has(scrobbleKey(track)))));
       const remaining = maxTracks - scannedTracks;
       const selected = oldestFirst && remaining < historical.length
         ? historical.slice(-remaining)
@@ -119,15 +126,19 @@ export class HistorySyncService {
       storedRowsChanged += this.repository.upsertTracks(this.username, selected);
       for (const track of selected) {
         if (track.playedAtUnix !== null) oldestSelectedUnix = Math.min(oldestSelectedUnix ?? track.playedAtUnix, track.playedAtUnix);
+        if (mode === "incremental" && track.playedAtUnix !== null) {
+          if (cursorUnix === null || track.playedAtUnix > cursorUnix) {
+            cursorUnix = track.playedAtUnix;
+            boundaryKeys = new Set();
+          }
+          if (track.playedAtUnix === cursorUnix) boundaryKeys.add(scrobbleKey(track));
+        }
       }
+      if (mode === "incremental") saveIncrementalProgress();
 
       const atRangeEnd = oldestFirst
         ? page <= 1
         : response.pageInfo.totalPages === 0 || page >= response.pageInfo.totalPages || response.tracks.length < response.pageInfo.perPage;
-      if (historical.length === 0) {
-        completedRequestedRange = true;
-        break;
-      }
       if (selected.length < historical.length) break;
       if (atRangeEnd) {
         completedRequestedRange = true;
@@ -149,6 +160,7 @@ export class HistorySyncService {
         this.repository.markSync(this.username, mode, false, finishedAtUnix);
       }
     } else {
+      if (completedRequestedRange) this.repository.clearIncrementalSyncProgress(this.username);
       this.repository.markSync(
         this.username,
         mode,
@@ -172,6 +184,12 @@ export class HistorySyncService {
   }
 }
 
-function isHistorical(track: RecentTrack): boolean {
+function isHistorical(track: RecentTrack): track is RecentTrack & { playedAtUnix: number } {
   return !track.nowPlaying && track.playedAtUnix !== null;
+}
+
+function scrobbleKey(track: RecentTrack): string {
+  // Match the scrobble primary key within a single timestamp. Saving identities
+  // rather than an offset also tolerates changes in API ordering at that second.
+  return JSON.stringify([normalize(track.artist), normalize(track.album ?? ""), normalize(track.name)]);
 }
