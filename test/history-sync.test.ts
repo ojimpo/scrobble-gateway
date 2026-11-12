@@ -9,6 +9,7 @@ import { DEFAULT_INCREMENTAL_LOOKBACK_SECONDS, HistorySyncService } from "../src
 const repositories: HistoryRepository[] = [];
 afterEach(() => {
   for (const repository of repositories.splice(0)) repository.close();
+  vi.restoreAllMocks();
 });
 
 describe("HistorySyncService", () => {
@@ -63,13 +64,13 @@ describe("HistorySyncService", () => {
     const sync = new HistorySyncService(api, repository, "listener", 2);
 
     const results = [];
-    for (let attempt = 0; attempt < 4; attempt += 1) results.push(await sync.sync("incremental", 2));
+    for (let attempt = 0; attempt < 3; attempt += 1) results.push(await sync.sync("incremental", 2));
 
     expect(repository.getStatus("listener")).toMatchObject({ indexedScrobbles: 5, fullHistorySynced: true });
-    expect(results.slice(0, 3).every((result) => !result.completedRequestedRange)).toBe(true);
-    expect(results[3]?.completedRequestedRange).toBe(true);
-    expect(results[2]?.status.coveredThroughAt).toBe(new Date(100 * 1000).toISOString());
-    expect(results[3]?.status.coveredThroughAt).not.toBe(new Date(100 * 1000).toISOString());
+    expect(results.slice(0, 2).every((result) => !result.completedRequestedRange)).toBe(true);
+    expect(results[2]?.completedRequestedRange).toBe(true);
+    expect(results[1]?.status.coveredThroughAt).toBe(new Date(100 * 1000).toISOString());
+    expect(results[2]?.status.coveredThroughAt).not.toBe(new Date(100 * 1000).toISOString());
   });
 
   it("picks up a late scrobble older than the newest indexed one", async () => {
@@ -86,7 +87,7 @@ describe("HistorySyncService", () => {
 
     expect(repository.getStatus("listener")).toMatchObject({ indexedScrobbles: 3 });
     expect(vi.mocked(api.getRecentTracksPage).mock.calls[0]?.[0]).toMatchObject({
-      from: base + 600 - DEFAULT_INCREMENTAL_LOOKBACK_SECONDS,
+      from: base + 600 - DEFAULT_INCREMENTAL_LOOKBACK_SECONDS - 1,
     });
   });
 
@@ -102,7 +103,119 @@ describe("HistorySyncService", () => {
 
     expect(repository.getStatus("listener")).toMatchObject({ indexedScrobbles: 1 });
   });
+
+  it("resumes a dense lookback after restart without dropping a late play or moving coverage early", async () => {
+    const base = 1_790_000_000;
+    vi.spyOn(Date, "now").mockReturnValue((base + 600) * 1000);
+    let repository = createRepository();
+    const existing = Array.from({ length: 300 }, (_, i) => track(`Existing ${i}`, base - i * 60));
+    repository.upsertTracks("listener", existing);
+    repository.markSync("listener", "full", true, base, base);
+    const api = recentApi([...existing, track("Late", base - 90)]);
+    const first = await new HistorySyncService(api, repository, "listener", 200).sync("incremental", 200);
+    expect(first).toMatchObject({ scannedTracks: 200, completedRequestedRange: false,
+      status: { indexedScrobbles: 300, incrementalSyncInProgress: true, coveredThroughAt: new Date(base * 1000).toISOString() } });
+
+    repository = reopenRepository(repository);
+    vi.spyOn(Date, "now").mockReturnValue((base + 3600) * 1000);
+    // Changing the setting does not abandon an unfinished lookback pass.
+    const second = await new HistorySyncService(api, repository, "listener", 200, 0).sync("incremental", 200);
+    expect(second).toMatchObject({ completedRequestedRange: true,
+      status: { indexedScrobbles: 301, incrementalSyncInProgress: false, coveredThroughAt: new Date((base + 600) * 1000).toISOString() } });
+    expect(second.scannedTracks).toBeLessThanOrEqual(200);
+    expect(vi.mocked(api.getRecentTracksPage).mock.calls.every(([input]) => input.to === base + 600)).toBe(true);
+  });
+
+  it("finishes a capped backlog and catches a play arriving behind its cursor on the next lookback pass", async () => {
+    const base = 1_790_000_000;
+    vi.spyOn(Date, "now").mockReturnValue((base + 60_000) * 1000);
+    const repository = createRepository();
+    repository.upsertTracks("listener", [track("Boundary", base)]);
+    repository.markSync("listener", "full", true, base, base);
+    const allTracks = Array.from({ length: 451 }, (_, i) => track(`Play ${i}`, base + i * 60));
+    const api = recentApi(allTracks);
+    const sync = new HistorySyncService(api, repository, "listener", 200);
+    const first = await sync.sync("incremental", 200);
+    expect(first.completedRequestedRange).toBe(false);
+    expect(first.status.newestScrobbleAt).toBe(new Date((base + 199 * 60) * 1000).toISOString());
+    allTracks.push(track("Late during catch-up", base + 90));
+
+    const results = [first];
+    // Finish the fixed catch-up range, then reconcile it again to see the
+    // arrival behind the previous cursor. All plays remain within 72 hours.
+    for (let attempt = 0; attempt < 5; attempt++) results.push(await sync.sync("incremental", 200));
+    expect(results.every(result => result.scannedTracks <= 200)).toBe(true);
+    expect(results.filter(result => result.completedRequestedRange)).toHaveLength(2);
+    expect(repository.getStatus("listener").indexedScrobbles).toBe(453);
+  });
+
+  it("preserves an empty-index incremental range when newer plays arrive between capped runs", async () => {
+    const base = 1_790_000_000;
+    vi.spyOn(Date, "now").mockReturnValue((base + 1000) * 1000);
+    let repository = createRepository();
+    const allTracks = Array.from({ length: 450 }, (_, i) => track(`Play ${i}`, base + i));
+    const api = recentApi(allTracks);
+    await new HistorySyncService(api, repository, "listener", 200).sync("incremental", 200);
+    allTracks.push(track("After the original upper bound", base + 1500));
+    repository = reopenRepository(repository);
+    vi.spyOn(Date, "now").mockReturnValue((base + 2000) * 1000);
+    const sync = new HistorySyncService(api, repository, "listener", 200);
+    await sync.sync("incremental", 200);
+    const completed = await sync.sync("incremental", 200);
+    expect(completed).toMatchObject({ completedRequestedRange: true,
+      status: { indexedScrobbles: 450, fullHistorySynced: false, coveredThroughAt: new Date((base + 1000) * 1000).toISOString() } });
+    for (let attempt = 0; attempt < 3; attempt++) await sync.sync("incremental", 200);
+    expect(repository.getStatus("listener").indexedScrobbles).toBe(451);
+  });
+
+  it("resumes after a page failure without skipping the unfinished middle even with a large budget", async () => {
+    const base = 1_790_000_000;
+    vi.spyOn(Date, "now").mockReturnValue((base + 1000) * 1000);
+    let repository = createRepository();
+    const allTracks = Array.from({ length: 450 }, (_, i) => track(`Play ${i}`, base + i));
+    const api = recentApi(allTracks);
+    const fetchPage = api.getRecentTracksPage;
+    let fail = true;
+    api.getRecentTracksPage = vi.fn(async (input) => {
+      if (fail && input.page === 2) { fail = false; throw new Error("page failed"); }
+      return fetchPage(input);
+    });
+    await expect(new HistorySyncService(api, repository, "listener", 1000).sync("incremental", 1000)).rejects.toThrow("page failed");
+    expect(repository.getStatus("listener")).toMatchObject({ indexedScrobbles: 50, coveredThroughAt: null, incrementalSyncInProgress: true });
+    repository = reopenRepository(repository);
+    const completed = await new HistorySyncService(api, repository, "listener", 1000).sync("incremental", 1000);
+    expect(completed).toMatchObject({ completedRequestedRange: true, status: { indexedScrobbles: 450, incrementalSyncInProgress: false } });
+  });
+
+  it.each([false, true])("advances through same-second ties with reordered results (exclusive from=%s)", async (exclusiveFrom) => {
+    const base = 1_790_000_000;
+    vi.spyOn(Date, "now").mockReturnValue((base + 600) * 1000);
+    let repository = createRepository();
+    const allTracks = Array.from({ length: 450 }, (_, i) => track(`Same second ${i}`, base));
+    allTracks.push(track("Newer", base + 60));
+    const api = recentApi(allTracks, exclusiveFrom);
+    const sync = new HistorySyncService(api, repository, "listener", 200);
+    const first = await sync.sync("incremental", 200);
+    expect(first).toMatchObject({ scannedTracks: 200, completedRequestedRange: false });
+    allTracks.reverse();
+    repository = reopenRepository(repository);
+    const resumed = new HistorySyncService(api, repository, "listener", 200);
+    const second = await resumed.sync("incremental", 200);
+    expect(second.completedRequestedRange).toBe(false);
+    const third = await resumed.sync("incremental", 200);
+    expect(third).toMatchObject({ completedRequestedRange: true, status: { indexedScrobbles: 451 } });
+    expect([first, second, third].every(result => result.scannedTracks <= 200)).toBe(true);
+  });
 });
+
+function reopenRepository(repository: HistoryRepository): HistoryRepository {
+  const path = repository.path;
+  repositories.splice(repositories.indexOf(repository), 1);
+  repository.close();
+  const reopened = new HistoryRepository(path);
+  repositories.push(reopened);
+  return reopened;
+}
 
 function createRepository(): HistoryRepository {
   const directory = mkdtempSync(join(tmpdir(), "lastfm-mcp-sync-"));
@@ -127,16 +240,17 @@ function track(name: string, playedAtUnix: number): RecentTrack {
   };
 }
 
-function recentApi(allTracks: RecentTrack[]): LastFmApi {
+function recentApi(allTracks: RecentTrack[], exclusiveFrom = false): LastFmApi {
   return {
-    getRecentTracksPage: vi.fn(async ({ from, to, page = 1 }) => {
+    getRecentTracksPage: vi.fn(async ({ from, to, page = 1, limit = 200 }) => {
       const matching = allTracks.filter((item) =>
         item.playedAtUnix !== null
-        && (from === undefined || item.playedAtUnix >= from)
-        && (to === undefined || item.playedAtUnix <= to));
+        && (from === undefined || (exclusiveFrom ? item.playedAtUnix > from : item.playedAtUnix >= from))
+        && (to === undefined || item.playedAtUnix <= to))
+        .sort((a, b) => b.playedAtUnix! - a.playedAtUnix!);
       return {
-        tracks: page === 1 ? matching : [],
-        pageInfo: { page, perPage: matching.length, totalPages: matching.length === 0 ? 0 : 1, total: matching.length },
+        tracks: matching.slice((page - 1) * limit, page * limit),
+        pageInfo: { page, perPage: limit, totalPages: Math.ceil(matching.length / limit), total: matching.length },
       };
     }),
   } as unknown as LastFmApi;

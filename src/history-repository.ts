@@ -16,6 +16,7 @@ export type HistoryStatus = {
   lastSyncAt: string | null;
   lastSyncMode: string | null;
   fullSyncInProgress: boolean;
+  incrementalSyncInProgress: boolean;
 };
 
 export type HistorySearch = {
@@ -35,6 +36,12 @@ export type HistoryAggregate = {
 };
 
 export type WindowArtistCount = { artist: string; plays: number };
+
+export type IncrementalSyncProgress = {
+  cursorUnix: number | null;
+  upperUnix: number;
+  boundaryKeys: string[];
+};
 
 export class HistoryRepository {
   private readonly db: DatabaseSync;
@@ -116,6 +123,7 @@ export class HistoryRepository {
       lastSyncAt: toIso(nullableNumber(sync?.last_sync_at_unix)),
       lastSyncMode: nullableString(sync?.last_sync_mode),
       fullSyncInProgress: nullableNumber(sync?.full_sync_cursor_unix) !== null,
+      incrementalSyncInProgress: this.db.prepare("SELECT 1 FROM incremental_sync_progress WHERE username = ?").get(username) !== undefined,
     };
   }
 
@@ -164,6 +172,31 @@ export class HistoryRepository {
     this.db.prepare(`
       UPDATE sync_state SET full_sync_cursor_unix = NULL, full_sync_upper_unix = NULL WHERE username = ?
     `).run(username);
+  }
+
+  getIncrementalSyncProgress(username: string): IncrementalSyncProgress | null {
+    const row = this.db.prepare("SELECT * FROM incremental_sync_progress WHERE username = ?").get(username) as SqlRow | undefined;
+    if (!row) return null;
+    return {
+      cursorUnix: nullableNumber(row.cursor_unix),
+      upperUnix: numberOf(row.upper_unix),
+      boundaryKeys: JSON.parse(String(row.boundary_keys)) as string[],
+    };
+  }
+
+  setIncrementalSyncProgress(username: string, progress: IncrementalSyncProgress): void {
+    this.db.prepare(`
+      INSERT INTO incremental_sync_progress (username, cursor_unix, upper_unix, boundary_keys)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(username) DO UPDATE SET
+        cursor_unix = excluded.cursor_unix,
+        upper_unix = excluded.upper_unix,
+        boundary_keys = excluded.boundary_keys
+    `).run(username, progress.cursorUnix, progress.upperUnix, JSON.stringify(progress.boundaryKeys));
+  }
+
+  clearIncrementalSyncProgress(username: string): void {
+    this.db.prepare("DELETE FROM incremental_sync_progress WHERE username = ?").run(username);
   }
 
   search(
@@ -310,6 +343,12 @@ export class HistoryRepository {
         coverage_through_unix INTEGER,
         full_sync_cursor_unix INTEGER,
         full_sync_upper_unix INTEGER
+      );
+      CREATE TABLE IF NOT EXISTS incremental_sync_progress (
+        username TEXT PRIMARY KEY,
+        cursor_unix INTEGER,
+        upper_unix INTEGER NOT NULL,
+        boundary_keys TEXT NOT NULL
       );
     `);
     const syncColumns = new Set((this.db.prepare("PRAGMA table_info(sync_state)").all() as SqlRow[]).map((row) => String(row.name)));

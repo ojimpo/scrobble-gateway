@@ -153,7 +153,7 @@ export function createLastFmMcpServer(
     {
       title: "Sync listening history",
       description:
-        "Populate the local scrobble index. Use full once for an exact backfill, then incremental to fetch only newer plays. The operation may take minutes for large libraries.",
+        "Populate the local scrobble index. Use full once for an exact backfill, then incremental for new plays and a configurable lookback for late arrivals. Repeat capped runs until completedRequestedRange=true; unfinished passes resume across restarts. The operation may take minutes for large libraries.",
       inputSchema: z.object({
         mode: z.enum(["incremental", "full"]).default("incremental"),
         maxTracks: z.number().int().min(200).max(2_000_000).default(50_000),

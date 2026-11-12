@@ -82,9 +82,9 @@ describe("HistorySyncScheduler", () => {
     }
   });
 
-  it("is enabled hourly by default", () => {
+  it("is enabled with a two-minute interval by default", () => {
     const config = loadConfig({ LASTFM_API_KEY: "key", LASTFM_USERNAME: "listener", MCP_HOST: "127.0.0.1" });
-    expect(config).toMatchObject({ historyAutoSyncEnabled: true, historyAutoSyncIntervalMs: 3_600_000 });
+    expect(config).toMatchObject({ historyAutoSyncEnabled: true, historyAutoSyncIntervalMs: 120_000 });
   });
 });
 
